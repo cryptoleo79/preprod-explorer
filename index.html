@@ -106,21 +106,23 @@
               <span id="networkLabel" class="text-sm font-medium text-white">PREPROD</span>
               <svg class="w-4 h-4 text-slate-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </button>
-            <div id="networkMenu" class="hidden absolute top-full mt-2 left-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl z-50 min-w-[200px] overflow-hidden">
-              <div class="px-4 py-2 border-b border-slate-700/50"><span class="text-xs text-slate-500 uppercase tracking-wider">Select Network</span></div>
-              <button class="network-opt w-full px-4 py-3 text-left hover:bg-orange-500/10 transition flex items-center gap-3" data-network="preview">
-                <div class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-lg shadow-cyan-400/50"></div>
-                <div class="flex-1"><p class="text-sm font-medium text-white">Preview Net</p><p class="text-xs text-slate-500">lite.nightforge.jp</p></div>
-                <svg class="w-4 h-4 text-orange-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            <div id="networkMenu" class="hidden absolute top-full mt-2 left-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl z-50 min-w-[220px] overflow-hidden">
+              <button class="network-opt w-full px-4 py-3 text-left hover:bg-green-500/10 transition flex items-center gap-3" data-network="mainnet">
+                <div class="w-2 h-2 rounded-full bg-green-400"></div>
+                <div class="flex-1"><p class="text-sm font-medium text-white">Mainnet</p><p class="text-xs text-slate-500">mainnet.nightforge.jp</p></div>
               </button>
               <button class="network-opt w-full px-4 py-3 text-left hover:bg-orange-500/10 transition flex items-center gap-3" data-network="preprod">
-                <div class="w-2.5 h-2.5 rounded-full bg-orange-400"></div>
-                <div class="flex-1"><p class="text-sm font-medium text-white">Preprod Net</p><p class="text-xs text-orange-400">preprod.nightforge.jp</p></div><svg class="w-4 h-4 text-orange-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <div class="w-2 h-2 rounded-full bg-orange-400"></div>
+                <div class="flex-1"><p class="text-sm font-medium text-orange-400">Preprod Net</p><p class="text-xs text-orange-400">preprod.nightforge.jp</p></div>
+                <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               </button>
-              <button class="network-opt w-full px-4 py-3 text-left hover:bg-yellow-500/10 transition flex items-center gap-3" data-network="testnet"><div class="w-2 h-2 rounded-full bg-yellow-400"></div><div class="flex-1"><p class="text-sm font-medium text-white">Testnet</p><p class="text-xs text-yellow-400">Sunset Feb 9</p></div></button>
-              <button class="network-opt w-full px-4 py-3 text-left hover:bg-green-500/10 transition flex items-center gap-3" data-network="mainnet">
-                <div class="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse"></div>
-                <div class="flex-1"><p class="text-sm font-medium text-white">Mainnet</p><p class="text-xs text-green-400">mainnet.nightforge.jp</p></div>
+              <button class="network-opt w-full px-4 py-3 text-left hover:bg-yellow-500/10 transition flex items-center gap-3" data-network="testnet">
+                <div class="w-2 h-2 rounded-full bg-yellow-400"></div>
+                <div class="flex-1"><p class="text-sm font-medium text-white">Testnet</p><p class="text-xs text-slate-500">Sunset Feb 9</p></div>
+              </button>
+              <button class="network-opt w-full px-4 py-3 text-left hover:bg-cyan-500/10 transition flex items-center gap-3" data-network="preview">
+                <div class="w-2 h-2 rounded-full bg-cyan-400"></div>
+                <div class="flex-1"><p class="text-sm font-medium text-white">Preview Net</p><p class="text-xs text-slate-500">preview.nightforge.jp</p></div>
               </button>
             </div>
           </div>
