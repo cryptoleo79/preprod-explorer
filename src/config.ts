@@ -12,7 +12,7 @@ export const config = {
   // Node Info (from RPC)
   node: {
     name: 'Midnight Node',
-    version: '0.20.0-76958d41',
+    version: '0.21.0-e492ad2b',
     ledgerVersion: 'ledger-7.0.0-rc.2',
     specVersion: 20000,
     transactionVersion: 2,
