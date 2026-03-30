@@ -13,6 +13,15 @@ import {
   getLatestEpoch,
   searchByHash,
   getMidnightTransactions,
+  getMidnightTxsWithTimestamp,
+  getAllMidnightTxCount,
+  getBridgeAnalytics,
+  getContractAnalytics,
+  getNetworkOverviewData,
+  getPrivacyFromEvents,
+  getCommitteeMembers,
+  getContractAddresses,
+  getEventBreakdown,
   db,
 } from '../indexer/database.js';
 import config from '../config.js';
@@ -35,40 +44,40 @@ app.get('/', async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Midnight Preprod Explorer</title>
+  <title>Midnight Preview Explorer</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e0e0e0; padding: 20px; }
     .container { max-width: 1200px; margin: 0 auto; }
-    h1 { color: #9d4edd; margin-bottom: 10px; }
+    h1 { color: #00d4aa; margin-bottom: 10px; }
     .subtitle { color: #888; margin-bottom: 30px; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
-    .stat { background: #1a1a2e; padding: 20px; border-radius: 10px; border: 1px solid #2a2a4e; }
+    .stat { background: #1a1a2e; padding: 20px; border-radius: 10px; border: 1px solid #1a3a3a; }
     .stat-label { color: #888; font-size: 12px; text-transform: uppercase; }
-    .stat-value { font-size: 24px; font-weight: bold; color: #9d4edd; margin-top: 5px; }
-    .section { background: #1a1a2e; border-radius: 10px; padding: 20px; margin-bottom: 20px; border: 1px solid #2a2a4e; }
-    .section h2 { color: #9d4edd; margin-bottom: 15px; font-size: 18px; }
+    .stat-value { font-size: 24px; font-weight: bold; color: #00d4aa; margin-top: 5px; }
+    .section { background: #1a1a2e; border-radius: 10px; padding: 20px; margin-bottom: 20px; border: 1px solid #1a3a3a; }
+    .section h2 { color: #00d4aa; margin-bottom: 15px; font-size: 18px; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #2a2a4e; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #1a3a3a; }
     th { color: #888; font-size: 12px; text-transform: uppercase; }
     td { font-family: monospace; font-size: 13px; }
-    .hash { color: #7b68ee; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-    a { color: #9d4edd; text-decoration: none; }
+    .hash { color: #4ecdc4; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+    a { color: #00d4aa; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .search { margin-bottom: 30px; display: flex; gap: 10px; }
-    .search input { flex: 1; padding: 12px 15px; border: 1px solid #2a2a4e; border-radius: 8px; background: #1a1a2e; color: #e0e0e0; font-size: 14px; }
-    .search button { padding: 12px 25px; background: #9d4edd; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: bold; }
-    .search button:hover { background: #8b3ecc; }
+    .search input { flex: 1; padding: 12px 15px; border: 1px solid #1a3a3a; border-radius: 8px; background: #1a1a2e; color: #e0e0e0; font-size: 14px; }
+    .search button { padding: 12px 25px; background: #00d4aa; border: none; border-radius: 8px; color: #0a0a0f; cursor: pointer; font-weight: bold; }
+    .search button:hover { background: #00b894; }
     .epoch-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
     .epoch-item { background: #0a0a0f; padding: 10px; border-radius: 5px; }
     .epoch-label { font-size: 11px; color: #666; }
-    .epoch-value { font-family: monospace; color: #7b68ee; }
+    .epoch-value { font-family: monospace; color: #4ecdc4; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Midnight Preprod Explorer</h1>
-    <p class="subtitle">Block explorer for Midnight Preprod Network</p>
+    <h1>Midnight Preview Explorer</h1>
+    <p class="subtitle">Block explorer for Midnight Preview Network (Ledger 8.0)</p>
 
     <div class="search">
       <input type="text" id="searchInput" placeholder="Search by block height or hash..." onkeypress="if(event.key==='Enter')search()">
@@ -210,18 +219,32 @@ app.get('/api/network', (req, res) => {
   });
 });
 
+// Cached stats for expensive queries (refresh every 30s)
+let statsCache: { data: any; ts: number } | null = null;
+function getCachedStats() {
+  const now = Date.now();
+  if (statsCache && now - statsCache.ts < 30000) return statsCache.data;
+  const stats = getStats();
+  const epoch = getLatestEpoch();
+  const midnightTxCount = db.prepare("SELECT COUNT(*) as count FROM extrinsics WHERE section = 'midnight'").get() as { count: number };
+  const contractCount = db.prepare("SELECT COUNT(DISTINCT json_extract(args, '$[0]')) as count FROM extrinsics WHERE section = 'midnight' AND method = 'sendMnTransaction'").get() as { count: number };
+  const result = {
+    ...stats,
+    totalBlocks: stats.blocks,
+    totalExtrinsics: stats.extrinsics,
+    totalEvents: stats.events,
+    totalTransactions: midnightTxCount.count || stats.extrinsics,
+    totalContracts: contractCount.count || 0,
+    epoch
+  };
+  statsCache = { data: result, ts: now };
+  return result;
+}
+
 // Stats (compatible with nightforge explorer)
 app.get('/api/stats', (req, res) => {
   try {
-    const stats = getStats();
-    const epoch = getLatestEpoch();
-    res.json({
-      ...stats,
-      totalBlocks: stats.blocks,
-      totalExtrinsics: stats.extrinsics,
-      totalEvents: stats.events,
-      epoch
-    });
+    res.json(getCachedStats());
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -230,15 +253,7 @@ app.get('/api/stats', (req, res) => {
 // Alias for nightforge compatibility
 app.get('/stats', (req, res) => {
   try {
-    const stats = getStats();
-    const epoch = getLatestEpoch();
-    res.json({
-      ...stats,
-      totalBlocks: stats.blocks,
-      totalExtrinsics: stats.extrinsics,
-      totalEvents: stats.events,
-      epoch
-    });
+    res.json(getCachedStats());
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -547,6 +562,24 @@ app.get('/api/analytics/block-rate', (req, res) => {
   }
 });
 
+// Transactions (alias for extrinsics - frontend compatibility)
+app.get('/api/transactions', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const extrinsics = getRecentExtrinsics(limit);
+    const transactions = (extrinsics as any[]).map(ext => ({
+      ...ext,
+      tx_hash: ext.hash,
+      status: ext.success ? 'SUCCESS' : 'FAILED',
+      timestamp: new Date(ext.timestamp * 1000).toISOString(),
+      block_timestamp: new Date(ext.timestamp * 1000).toISOString(),
+    }));
+    res.json(transactions);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Midnight transaction analytics - shielded/unshielded breakdown
 app.get('/api/analytics/tx-classification', (req, res) => {
   try {
@@ -604,6 +637,237 @@ app.get('/api/midnight-txs', (req, res) => {
   }
 });
 
+// Transaction by hash (alias for extrinsic lookup)
+app.get('/api/tx/:hash', (req, res) => {
+  try {
+    const hash = req.params.hash.startsWith('0x') ? req.params.hash : '0x' + req.params.hash;
+    const ext = getExtrinsicByHash(hash);
+    if (!ext) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    res.json(ext);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Contracts (extract from extrinsics)
+app.get('/api/contracts', (req, res) => {
+  try {
+    const contracts = db.prepare(`
+      SELECT DISTINCT
+        json_extract(args, '$[0]') as address,
+        MIN(block_height) as deployed_at,
+        COUNT(*) as interaction_count
+      FROM extrinsics
+      WHERE section = 'midnight' AND method = 'sendMnTransaction'
+      GROUP BY json_extract(args, '$[0]')
+      ORDER BY deployed_at DESC
+      LIMIT 100
+    `).all();
+    res.json(contracts);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Chain status (live RPC proxy)
+app.get('/api/chain-status', async (req, res) => {
+  try {
+    const [healthRes, versionRes, epochRes] = await Promise.all([
+      fetch(config.network.httpEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 1, jsonrpc: '2.0', method: 'system_health', params: [] }),
+        signal: AbortSignal.timeout(5000),
+      }),
+      fetch(config.network.httpEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 2, jsonrpc: '2.0', method: 'system_version', params: [] }),
+        signal: AbortSignal.timeout(5000),
+      }),
+      fetch(config.network.httpEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 3, jsonrpc: '2.0', method: 'sidechain_getStatus', params: [] }),
+        signal: AbortSignal.timeout(5000),
+      }),
+    ]);
+    const [health, version, epoch] = await Promise.all([
+      healthRes.json() as any,
+      versionRes.json() as any,
+      epochRes.json() as any,
+    ]);
+    res.json({
+      health: health.result,
+      version: version.result,
+      ...epoch.result,
+      network: config.network.name,
+      rpc: config.network.httpEndpoint,
+    });
+  } catch (error: any) {
+    res.status(502).json({ error: 'RPC unavailable' });
+  }
+});
+
+// Root transactions (alias)
+app.get('/api/root-transactions', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
+    const txs = db.prepare(`
+      SELECT * FROM extrinsics WHERE section = 'midnight'
+      ORDER BY block_height DESC LIMIT ?
+    `).all(limit);
+    res.json(txs);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Privacy Dashboard API (event-based) ---
+let privacyAnalyticsCache: { data: any; ts: number } | null = null;
+
+app.get('/api/analytics/privacy', (req, res) => {
+  try {
+    const hours = Math.min(parseInt(req.query.hours as string) || 24, 168);
+    const now = Date.now();
+
+    // Return cached result if less than 60s old
+    if (privacyAnalyticsCache && now - privacyAnalyticsCache.ts < 60000 && privacyAnalyticsCache.data._hours === hours) {
+      return res.json(privacyAnalyticsCache.data);
+    }
+
+    const eventData = getPrivacyFromEvents(hours);
+
+    const result = {
+      totalMidnightTxs: eventData.totalMidnightTxs,
+      shielded: eventData.shielded,
+      unshielded: eventData.unshielded,
+      contractDeploys: eventData.contractDeploys,
+      contractCalls: eventData.contractCalls,
+      shieldedRatio: eventData.shieldedRatio,
+      unshieldedDetails: eventData.unshieldedDetails,
+      trend: eventData.trend,
+      _hours: hours,
+    };
+
+    privacyAnalyticsCache = { data: result, ts: now };
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Committee Members API ---
+app.get('/api/committee', (req, res) => {
+  try {
+    const data = getCommitteeMembers();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Deployed Contracts API (event-based) ---
+app.get('/api/contracts/deployed', (req, res) => {
+  try {
+    const data = getContractAddresses();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Event Breakdown API ---
+app.get('/api/analytics/events', (req, res) => {
+  try {
+    const data = getEventBreakdown();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Bridge Monitor API ---
+app.get('/api/analytics/bridge', (req, res) => {
+  try {
+    const hours = Math.min(parseInt(req.query.hours as string) || 24, 168);
+    const data = getBridgeAnalytics(hours);
+
+    const recentBridgeOps = data.recentBridgeOps.map(op => {
+      let args_summary = '';
+      try {
+        const parsed = JSON.parse(op.args);
+        if (Array.isArray(parsed) && parsed.length >= 2) {
+          const cardanoInfo = JSON.parse(parsed[1]);
+          args_summary = `Cardano block #${cardanoInfo.blockNumber || 'N/A'} (${cardanoInfo.blockHash ? cardanoInfo.blockHash.slice(0, 16) + '...' : 'N/A'})`;
+        }
+      } catch {}
+      return {
+        hash: op.hash,
+        block_height: op.block_height,
+        timestamp: op.timestamp,
+        args_summary,
+      };
+    });
+
+    res.json({
+      totalBridgeOps: data.totalBridgeOps,
+      last24h: data.last24h,
+      trend: data.trend,
+      recentBridgeOps,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Contract Leaderboard API ---
+app.get('/api/analytics/contracts', (req, res) => {
+  try {
+    const data = getContractAnalytics();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Network Overview API ---
+app.get('/api/analytics/overview', (req, res) => {
+  try {
+    const data = getNetworkOverviewData();
+
+    // Get shielded ratio from events (much more reliable than hex decoding)
+    let shieldedRatio = 0;
+    try {
+      const privacyData = getPrivacyFromEvents();
+      shieldedRatio = privacyData.shieldedRatio;
+    } catch {}
+
+    res.json({
+      network: config.network.name,
+      blocks: data.blocksCount,
+      extrinsics: data.extrinsicsCount,
+      midnightTxs: data.midnightTxs,
+      bridgeOps: data.bridgeOps,
+      committeeUpdates: data.committeeUpdates,
+      avgBlockTime: data.avgBlockTime,
+      tps: data.tps,
+      shieldedRatio,
+      contractDeploys: data.contractDeploys,
+      contractCalls: data.contractCalls,
+      committeeSize: data.committeeSize,
+      eventBreakdown: data.eventBreakdown,
+      nodeVersion: config.node.version || 'unknown',
+      specVersion: config.node.specVersion || 0,
+      epoch: data.epoch || null,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export function startAPI() {
   app.listen(config.api.port, () => {
     console.log(`API server running on http://localhost:${config.api.port}`);
@@ -621,6 +885,13 @@ export function startAPI() {
     console.log(`  GET /api/epoch - Current epoch info`);
     console.log(`  GET /api/analytics/extrinsic-types - Extrinsic distribution`);
     console.log(`  GET /api/analytics/block-rate - Block production rate`);
+    console.log(`  GET /api/analytics/privacy - Privacy dashboard (event-based)`);
+    console.log(`  GET /api/analytics/bridge - Bridge monitor`);
+    console.log(`  GET /api/analytics/contracts - Contract leaderboard`);
+    console.log(`  GET /api/analytics/overview - Network overview`);
+    console.log(`  GET /api/analytics/events - Event type breakdown`);
+    console.log(`  GET /api/committee - Current committee members`);
+    console.log(`  GET /api/contracts/deployed - Deployed contracts (event-based)`);
   });
 }
 

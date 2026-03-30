@@ -3,7 +3,7 @@ import { startAPI } from './api/server.js';
 
 console.log('');
 console.log('===========================================');
-console.log('  Midnight Preprod Network Explorer');
+console.log('  Midnight Preview Network Explorer');
 console.log('===========================================');
 console.log('');
 
