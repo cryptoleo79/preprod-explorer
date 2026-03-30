@@ -35,40 +35,40 @@ app.get('/', async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Midnight Preview Explorer</title>
+  <title>Midnight Preprod Explorer</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e0e0e0; padding: 20px; }
     .container { max-width: 1200px; margin: 0 auto; }
-    h1 { color: #00d4aa; margin-bottom: 10px; }
+    h1 { color: #9d4edd; margin-bottom: 10px; }
     .subtitle { color: #888; margin-bottom: 30px; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
-    .stat { background: #1a1a2e; padding: 20px; border-radius: 10px; border: 1px solid #1a3a3a; }
+    .stat { background: #1a1a2e; padding: 20px; border-radius: 10px; border: 1px solid #2a2a4e; }
     .stat-label { color: #888; font-size: 12px; text-transform: uppercase; }
-    .stat-value { font-size: 24px; font-weight: bold; color: #00d4aa; margin-top: 5px; }
-    .section { background: #1a1a2e; border-radius: 10px; padding: 20px; margin-bottom: 20px; border: 1px solid #1a3a3a; }
-    .section h2 { color: #00d4aa; margin-bottom: 15px; font-size: 18px; }
+    .stat-value { font-size: 24px; font-weight: bold; color: #9d4edd; margin-top: 5px; }
+    .section { background: #1a1a2e; border-radius: 10px; padding: 20px; margin-bottom: 20px; border: 1px solid #2a2a4e; }
+    .section h2 { color: #9d4edd; margin-bottom: 15px; font-size: 18px; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #1a3a3a; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #2a2a4e; }
     th { color: #888; font-size: 12px; text-transform: uppercase; }
     td { font-family: monospace; font-size: 13px; }
-    .hash { color: #4ecdc4; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-    a { color: #00d4aa; text-decoration: none; }
+    .hash { color: #7b68ee; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+    a { color: #9d4edd; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .search { margin-bottom: 30px; display: flex; gap: 10px; }
-    .search input { flex: 1; padding: 12px 15px; border: 1px solid #1a3a3a; border-radius: 8px; background: #1a1a2e; color: #e0e0e0; font-size: 14px; }
-    .search button { padding: 12px 25px; background: #00d4aa; border: none; border-radius: 8px; color: #0a0a0f; cursor: pointer; font-weight: bold; }
-    .search button:hover { background: #00b894; }
+    .search input { flex: 1; padding: 12px 15px; border: 1px solid #2a2a4e; border-radius: 8px; background: #1a1a2e; color: #e0e0e0; font-size: 14px; }
+    .search button { padding: 12px 25px; background: #9d4edd; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: bold; }
+    .search button:hover { background: #8b3ecc; }
     .epoch-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
     .epoch-item { background: #0a0a0f; padding: 10px; border-radius: 5px; }
     .epoch-label { font-size: 11px; color: #666; }
-    .epoch-value { font-family: monospace; color: #4ecdc4; }
+    .epoch-value { font-family: monospace; color: #7b68ee; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Midnight Preview Explorer</h1>
-    <p class="subtitle">Block explorer for Midnight Preview Network (Ledger 8.0)</p>
+    <h1>Midnight Preprod Explorer</h1>
+    <p class="subtitle">Block explorer for Midnight Preprod Network</p>
 
     <div class="search">
       <input type="text" id="searchInput" placeholder="Search by block height or hash..." onkeypress="if(event.key==='Enter')search()">
@@ -210,32 +210,18 @@ app.get('/api/network', (req, res) => {
   });
 });
 
-// Cached stats for expensive queries (refresh every 30s)
-let statsCache: { data: any; ts: number } | null = null;
-function getCachedStats() {
-  const now = Date.now();
-  if (statsCache && now - statsCache.ts < 30000) return statsCache.data;
-  const stats = getStats();
-  const epoch = getLatestEpoch();
-  const midnightTxCount = db.prepare("SELECT COUNT(*) as count FROM extrinsics WHERE section = 'midnight'").get() as { count: number };
-  const contractCount = db.prepare("SELECT COUNT(DISTINCT json_extract(args, '$[0]')) as count FROM extrinsics WHERE section = 'midnight' AND method = 'sendMnTransaction'").get() as { count: number };
-  const result = {
-    ...stats,
-    totalBlocks: stats.blocks,
-    totalExtrinsics: stats.extrinsics,
-    totalEvents: stats.events,
-    totalTransactions: midnightTxCount.count || stats.extrinsics,
-    totalContracts: contractCount.count || 0,
-    epoch
-  };
-  statsCache = { data: result, ts: now };
-  return result;
-}
-
 // Stats (compatible with nightforge explorer)
 app.get('/api/stats', (req, res) => {
   try {
-    res.json(getCachedStats());
+    const stats = getStats();
+    const epoch = getLatestEpoch();
+    res.json({
+      ...stats,
+      totalBlocks: stats.blocks,
+      totalExtrinsics: stats.extrinsics,
+      totalEvents: stats.events,
+      epoch
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -244,7 +230,15 @@ app.get('/api/stats', (req, res) => {
 // Alias for nightforge compatibility
 app.get('/stats', (req, res) => {
   try {
-    res.json(getCachedStats());
+    const stats = getStats();
+    const epoch = getLatestEpoch();
+    res.json({
+      ...stats,
+      totalBlocks: stats.blocks,
+      totalExtrinsics: stats.extrinsics,
+      totalEvents: stats.events,
+      epoch
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -553,24 +547,6 @@ app.get('/api/analytics/block-rate', (req, res) => {
   }
 });
 
-// Transactions (alias for extrinsics - frontend compatibility)
-app.get('/api/transactions', (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
-    const extrinsics = getRecentExtrinsics(limit);
-    const transactions = (extrinsics as any[]).map(ext => ({
-      ...ext,
-      tx_hash: ext.hash,
-      status: ext.success ? 'SUCCESS' : 'FAILED',
-      timestamp: new Date(ext.timestamp * 1000).toISOString(),
-      block_timestamp: new Date(ext.timestamp * 1000).toISOString(),
-    }));
-    res.json(transactions);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Midnight transaction analytics - shielded/unshielded breakdown
 app.get('/api/analytics/tx-classification', (req, res) => {
   try {
@@ -623,94 +599,6 @@ app.get('/api/midnight-txs', (req, res) => {
     });
 
     res.json(decoded);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Transaction by hash (alias for extrinsic lookup)
-app.get('/api/tx/:hash', (req, res) => {
-  try {
-    const hash = req.params.hash.startsWith('0x') ? req.params.hash : '0x' + req.params.hash;
-    const ext = getExtrinsicByHash(hash);
-    if (!ext) {
-      return res.status(404).json({ error: 'Transaction not found' });
-    }
-    res.json(ext);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Contracts (extract from extrinsics)
-app.get('/api/contracts', (req, res) => {
-  try {
-    const contracts = db.prepare(`
-      SELECT DISTINCT
-        json_extract(args, '$[0]') as address,
-        MIN(block_height) as deployed_at,
-        COUNT(*) as interaction_count
-      FROM extrinsics
-      WHERE section = 'midnight' AND method = 'sendMnTransaction'
-      GROUP BY json_extract(args, '$[0]')
-      ORDER BY deployed_at DESC
-      LIMIT 100
-    `).all();
-    res.json(contracts);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Chain status (live RPC proxy)
-app.get('/api/chain-status', async (req, res) => {
-  try {
-    const [healthRes, versionRes, epochRes] = await Promise.all([
-      fetch(config.network.httpEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 1, jsonrpc: '2.0', method: 'system_health', params: [] }),
-        signal: AbortSignal.timeout(5000),
-      }),
-      fetch(config.network.httpEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 2, jsonrpc: '2.0', method: 'system_version', params: [] }),
-        signal: AbortSignal.timeout(5000),
-      }),
-      fetch(config.network.httpEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 3, jsonrpc: '2.0', method: 'sidechain_getStatus', params: [] }),
-        signal: AbortSignal.timeout(5000),
-      }),
-    ]);
-    const [health, version, epoch] = await Promise.all([
-      healthRes.json() as any,
-      versionRes.json() as any,
-      epochRes.json() as any,
-    ]);
-    res.json({
-      health: health.result,
-      version: version.result,
-      ...epoch.result,
-      network: config.network.name,
-      rpc: config.network.httpEndpoint,
-    });
-  } catch (error: any) {
-    res.status(502).json({ error: 'RPC unavailable' });
-  }
-});
-
-// Root transactions (alias)
-app.get('/api/root-transactions', (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
-    const txs = db.prepare(`
-      SELECT * FROM extrinsics WHERE section = 'midnight'
-      ORDER BY block_height DESC LIMIT ?
-    `).all(limit);
-    res.json(txs);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
