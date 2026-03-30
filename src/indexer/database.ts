@@ -285,21 +285,48 @@ export function getLatestEpoch() {
 }
 
 export function getStats() {
-  const blocksCount = db.prepare('SELECT COUNT(*) as count FROM blocks').get() as { count: number };
-  const extrinsicsCount = db.prepare('SELECT COUNT(*) as count FROM extrinsics').get() as { count: number };
-  const eventsCount = db.prepare('SELECT COUNT(*) as count FROM events').get() as { count: number };
+  // Use MAX(rowid) as fast estimate instead of slow COUNT(*) on large tables
+  const blocksCount = db.prepare('SELECT MAX(rowid) as count FROM blocks').get() as { count: number };
+  const extrinsicsCount = db.prepare('SELECT MAX(rowid) as count FROM extrinsics').get() as { count: number };
+  const eventsCount = db.prepare('SELECT MAX(rowid) as count FROM events').get() as { count: number };
   const latestBlock = db.prepare('SELECT MAX(height) as height, MAX(timestamp) as timestamp FROM blocks').get() as { height: number; timestamp: number };
   const oldestBlock = db.prepare('SELECT MIN(height) as height FROM blocks').get() as { height: number };
 
+  // Transaction type breakdown
+  const txTypes = db.prepare(`
+    SELECT section, method, COUNT(*) as count
+    FROM extrinsics
+    GROUP BY section, method
+    ORDER BY count DESC
+  `).all() as { section: string; method: string; count: number }[];
+
+  const midnightTxs = txTypes.find(t => t.section === 'midnight' && t.method === 'sendMnTransaction')?.count || 0;
+  const bridgeOps = txTypes.find(t => t.section === 'cNightObservation' && t.method === 'processTokens')?.count || 0;
+  const committeeOps = txTypes.find(t => t.section === 'sessionCommitteeManagement' && t.method === 'set')?.count || 0;
+
   return {
-    blocks: blocksCount.count,
-    extrinsics: extrinsicsCount.count,
-    events: eventsCount.count,
+    blocks: blocksCount.count || 0,
+    extrinsics: extrinsicsCount.count || 0,
+    events: eventsCount.count || 0,
     latestBlock: latestBlock.height,
     latestTimestamp: latestBlock.timestamp,
     oldestBlock: oldestBlock.height,
     network: config.network.name,
+    transactions: {
+      total: midnightTxs,
+      bridge: bridgeOps,
+      committee: committeeOps,
+    },
   };
+}
+
+export function getMidnightTransactions(limit = 100) {
+  return db.prepare(`
+    SELECT * FROM extrinsics
+    WHERE section = 'midnight' AND method = 'sendMnTransaction'
+    ORDER BY block_height DESC, index_in_block DESC
+    LIMIT ?
+  `).all(limit);
 }
 
 export function searchByHash(hash: string) {
