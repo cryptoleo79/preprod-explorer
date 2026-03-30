@@ -35,10 +35,20 @@ export async function connectToChain(): Promise<ApiPromise> {
   console.log('Connected to RPC');
   reconnectAttempts = 0;
 
-  // Log chain info
+  // Log chain info and update config dynamically
   const chain = await api.rpc.system.chain();
   const version = await api.rpc.system.version();
+  const genesisHash = api.genesisHash.toHex();
   console.log(`Chain: ${chain}, Version: ${version}`);
+
+  config.network.genesisHash = genesisHash;
+  config.node.version = version.toString();
+
+  try {
+    const runtime = await api.rpc.state.getRuntimeVersion();
+    config.node.specVersion = runtime.specVersion.toNumber();
+    config.node.transactionVersion = runtime.transactionVersion.toNumber();
+  } catch {}
 
   return api;
 }
@@ -48,7 +58,7 @@ function scheduleReconnect() {
 
   isReconnecting = true;
   const delay = Math.min(
-    config.indexer.reconnectDelay * Math.pow(2, reconnectAttempts),
+    config.indexer.reconnectDelay * Math.pow(2, Math.min(reconnectAttempts, 10)),
     config.indexer.maxReconnectDelay
   );
   reconnectAttempts++;
@@ -59,6 +69,7 @@ function scheduleReconnect() {
 
 async function reconnect() {
   console.log('Reconnecting...');
+  isReconnecting = false;
   try {
     if (api) {
       try {
@@ -69,12 +80,11 @@ async function reconnect() {
     subscription = null;
 
     await startSubscription();
-    isReconnecting = false;
+    reconnectAttempts = 0;
 
     await detectAndFillGaps();
   } catch (err: any) {
     console.log('Reconnect failed:', err.message);
-    isReconnecting = false;
     scheduleReconnect();
   }
 }
@@ -276,21 +286,29 @@ export async function indexBlock(api: ApiPromise, blockNum: number): Promise<num
 
 export async function fetchEpochInfo(apiInstance: ApiPromise): Promise<void> {
   try {
-    const status = await apiInstance.rpc.sidechain.getStatus();
-    const statusJson = status.toJSON() as any;
+    // Use raw RPC call since sidechain methods may not be in metadata
+    const response = await fetch(config.network.httpEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 1, jsonrpc: '2.0', method: 'sidechain_getStatus', params: [] }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const result = await response.json() as any;
 
-    if (statusJson?.sidechain) {
+    if (result?.result?.sidechain) {
+      const sc = result.result.sidechain;
+      const mc = result.result.mainchain;
       insertEpochInfo({
-        epoch: statusJson.sidechain.epoch,
-        sidechain_slot: statusJson.sidechain.slot,
-        mainchain_epoch: statusJson.mainchain?.epoch || 0,
-        mainchain_slot: statusJson.mainchain?.slot || 0,
-        next_epoch_timestamp: statusJson.sidechain.nextEpochTimestamp || 0,
+        epoch: sc.epoch,
+        sidechain_slot: sc.slot,
+        mainchain_epoch: mc?.epoch || 0,
+        mainchain_slot: mc?.slot || 0,
+        next_epoch_timestamp: sc.nextEpochTimestamp || 0,
       });
-      console.log(`Recorded epoch info: Epoch ${statusJson.sidechain.epoch}`);
+      console.log(`Recorded epoch info: Epoch ${sc.epoch}, Slot ${sc.slot}`);
     }
-  } catch (e) {
-    // sidechain RPC might not be available
+  } catch (e: any) {
+    console.log('Epoch fetch failed:', e.message);
   }
 }
 
