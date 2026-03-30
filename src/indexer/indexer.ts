@@ -286,7 +286,6 @@ export async function indexBlock(api: ApiPromise, blockNum: number): Promise<num
 
 export async function fetchEpochInfo(apiInstance: ApiPromise): Promise<void> {
   try {
-    // Use raw RPC call since sidechain methods may not be in metadata
     const response = await fetch(config.network.httpEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
