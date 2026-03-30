@@ -340,3 +340,287 @@ export function searchByHash(hash: string) {
 
   return null;
 }
+
+// --- Analytics query functions ---
+
+export function getMidnightTxsWithTimestamp(hours: number) {
+  const cutoff = Math.floor(Date.now() / 1000) - hours * 3600;
+  return db.prepare(`
+    SELECT hash, args, timestamp, block_height, signer
+    FROM extrinsics
+    WHERE section = 'midnight' AND method = 'sendMnTransaction' AND timestamp >= ?
+    ORDER BY timestamp ASC
+  `).all(cutoff) as { hash: string; args: string; timestamp: number; block_height: number; signer: string }[];
+}
+
+export function getAllMidnightTxCount() {
+  return (db.prepare("SELECT COUNT(*) as count FROM extrinsics WHERE section = 'midnight' AND method = 'sendMnTransaction'").get() as { count: number }).count;
+}
+
+export function getBridgeAnalytics(hours: number) {
+  const cutoff = Math.floor(Date.now() / 1000) - hours * 3600;
+  const totalBridgeOps = (db.prepare("SELECT COUNT(*) as count FROM extrinsics WHERE section = 'cNightObservation' AND method = 'processTokens'").get() as { count: number }).count;
+  const last24h = (db.prepare("SELECT COUNT(*) as count FROM extrinsics WHERE section = 'cNightObservation' AND method = 'processTokens' AND timestamp >= ?").get(cutoff) as { count: number }).count;
+
+  const trend = db.prepare(`
+    SELECT
+      datetime((timestamp / 3600) * 3600, 'unixepoch') as hour,
+      COUNT(*) as count
+    FROM extrinsics
+    WHERE section = 'cNightObservation' AND method = 'processTokens' AND timestamp >= ?
+    GROUP BY (timestamp / 3600)
+    ORDER BY hour
+  `).all(cutoff) as { hour: string; count: number }[];
+
+  const recentBridgeOps = db.prepare(`
+    SELECT hash, block_height, timestamp, args
+    FROM extrinsics
+    WHERE section = 'cNightObservation' AND method = 'processTokens'
+    ORDER BY block_height DESC, index_in_block DESC
+    LIMIT 10
+  `).all() as { hash: string; block_height: number; timestamp: number; args: string }[];
+
+  return { totalBridgeOps, last24h, trend, recentBridgeOps };
+}
+
+export function getContractAnalytics() {
+  const topContracts = db.prepare(`
+    SELECT
+      signer as address,
+      COUNT(*) as interactions,
+      MIN(timestamp) as firstSeen,
+      MAX(timestamp) as lastSeen
+    FROM extrinsics
+    WHERE section = 'midnight' AND method = 'sendMnTransaction' AND signer IS NOT NULL
+    GROUP BY signer
+    ORDER BY interactions DESC
+    LIMIT 50
+  `).all() as { address: string; interactions: number; firstSeen: number; lastSeen: number }[];
+
+  const totalContracts = topContracts.length;
+
+  const deploymentsPerDay = db.prepare(`
+    SELECT
+      date(timestamp, 'unixepoch') as day,
+      COUNT(*) as count
+    FROM extrinsics
+    WHERE section = 'midnight' AND method = 'sendMnTransaction'
+    GROUP BY day
+    ORDER BY day DESC
+    LIMIT 30
+  `).all() as { day: string; count: number }[];
+
+  return { totalContracts, topContracts, deploymentsPerDay };
+}
+
+export function getNetworkOverviewData() {
+  const blocksCount = (db.prepare('SELECT COUNT(*) as count FROM blocks').get() as { count: number }).count;
+  const extrinsicsCount = (db.prepare('SELECT COUNT(*) as count FROM extrinsics').get() as { count: number }).count;
+  const midnightTxs = (db.prepare("SELECT COUNT(*) as count FROM extrinsics WHERE section = 'midnight' AND method = 'sendMnTransaction'").get() as { count: number }).count;
+  const bridgeOps = (db.prepare("SELECT COUNT(*) as count FROM extrinsics WHERE section = 'cNightObservation' AND method = 'processTokens'").get() as { count: number }).count;
+  const committeeUpdates = (db.prepare("SELECT COUNT(*) as count FROM extrinsics WHERE section = 'sessionCommitteeManagement' AND method = 'set'").get() as { count: number }).count;
+
+  // Average block time from last 100 blocks
+  const recentBlocks = db.prepare(`
+    SELECT timestamp FROM blocks ORDER BY height DESC LIMIT 101
+  `).all() as { timestamp: number }[];
+
+  let avgBlockTime = 0;
+  if (recentBlocks.length >= 2) {
+    const timeDiff = recentBlocks[0].timestamp - recentBlocks[recentBlocks.length - 1].timestamp;
+    avgBlockTime = Math.round((timeDiff / (recentBlocks.length - 1)) * 100) / 100;
+  }
+
+  // TPS from last hour
+  const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
+  const lastHourTxs = (db.prepare("SELECT COUNT(*) as count FROM extrinsics WHERE timestamp >= ?").get(oneHourAgo) as { count: number }).count;
+  const tps = Math.round((lastHourTxs / 3600) * 1000) / 1000;
+
+  const epoch = getLatestEpoch();
+
+  // Event-based counts for overview
+  const contractDeploys = (db.prepare("SELECT COUNT(*) as count FROM events WHERE section = 'midnight' AND method = 'ContractDeploy'").get() as { count: number }).count;
+  const contractCalls = (db.prepare("SELECT COUNT(*) as count FROM events WHERE section = 'midnight' AND method = 'ContractCall'").get() as { count: number }).count;
+  const eventBreakdown = getEventBreakdown();
+  const committeeData = getCommitteeMembers();
+
+  return { blocksCount, extrinsicsCount, midnightTxs, bridgeOps, committeeUpdates, avgBlockTime, tps, epoch, contractDeploys, contractCalls, committeeSize: committeeData.size, eventBreakdown };
+}
+
+// --- Event-based analytics functions ---
+
+export function getPrivacyFromEvents(hours?: number) {
+  // Total applied midnight txs from events
+  const totalTxApplied = (db.prepare("SELECT COUNT(*) as count FROM events WHERE section = 'midnight' AND method = 'TxApplied'").get() as { count: number }).count;
+
+  // Count extrinsic indices that have UnshieldedTokens events (these are unshielded txs)
+  const unshieldedTxCount = (db.prepare(`
+    SELECT COUNT(DISTINCT block_height || '-' || extrinsic_index) as count
+    FROM events
+    WHERE section = 'midnight' AND method = 'UnshieldedTokens'
+  `).get() as { count: number }).count;
+
+  // Shielded = TxApplied that don't have a corresponding UnshieldedTokens event
+  const shieldedTxCount = totalTxApplied - unshieldedTxCount;
+
+  // Contract deploys and calls from events
+  const contractDeploys = (db.prepare("SELECT COUNT(*) as count FROM events WHERE section = 'midnight' AND method = 'ContractDeploy'").get() as { count: number }).count;
+  const contractCalls = (db.prepare("SELECT COUNT(*) as count FROM events WHERE section = 'midnight' AND method = 'ContractCall'").get() as { count: number }).count;
+
+  const shieldedRatio = totalTxApplied > 0 ? Math.round((shieldedTxCount / totalTxApplied) * 100) / 100 : 0;
+
+  // Get unshielded details
+  const unshieldedDetails = db.prepare(`
+    SELECT e.block_height as block, e.data, e.timestamp
+    FROM events e
+    WHERE e.section = 'midnight' AND e.method = 'UnshieldedTokens'
+    ORDER BY e.block_height DESC
+    LIMIT 50
+  `).all() as { block: number; data: string; timestamp: number }[];
+
+  const parsedUnshieldedDetails = unshieldedDetails.map(row => {
+    try {
+      const parsed = JSON.parse(row.data);
+      return {
+        block: row.block,
+        address: parsed.address || parsed[0] || null,
+        tokenType: parsed.tokenType || parsed[1] || null,
+        value: parsed.value || parsed[2] || null,
+        timestamp: row.timestamp,
+      };
+    } catch {
+      return { block: row.block, address: null, tokenType: null, value: null, timestamp: row.timestamp };
+    }
+  });
+
+  // Trend: hourly breakdown from events (optionally filtered by hours)
+  let trend: { hour: string; shielded: number; unshielded: number; total: number }[] = [];
+  if (hours) {
+    const cutoff = Math.floor(Date.now() / 1000) - hours * 3600;
+
+    // Get all TxApplied per hour
+    const txAppliedPerHour = db.prepare(`
+      SELECT datetime((timestamp / 3600) * 3600, 'unixepoch') as hour, COUNT(*) as count
+      FROM events
+      WHERE section = 'midnight' AND method = 'TxApplied' AND timestamp >= ?
+      GROUP BY (timestamp / 3600)
+      ORDER BY hour
+    `).all(cutoff) as { hour: string; count: number }[];
+
+    // Get UnshieldedTokens per hour (unique tx per block+extrinsic)
+    const unshieldedPerHour = db.prepare(`
+      SELECT datetime((timestamp / 3600) * 3600, 'unixepoch') as hour,
+        COUNT(DISTINCT block_height || '-' || extrinsic_index) as count
+      FROM events
+      WHERE section = 'midnight' AND method = 'UnshieldedTokens' AND timestamp >= ?
+      GROUP BY (timestamp / 3600)
+      ORDER BY hour
+    `).all(cutoff) as { hour: string; count: number }[];
+
+    const unshieldedMap = new Map(unshieldedPerHour.map(r => [r.hour, r.count]));
+
+    trend = txAppliedPerHour.map(row => {
+      const unshielded = unshieldedMap.get(row.hour) || 0;
+      return {
+        hour: row.hour,
+        total: row.count,
+        unshielded,
+        shielded: row.count - unshielded,
+      };
+    });
+  }
+
+  return {
+    totalMidnightTxs: totalTxApplied,
+    shielded: shieldedTxCount,
+    unshielded: unshieldedTxCount,
+    contractDeploys,
+    contractCalls,
+    shieldedRatio,
+    unshieldedDetails: parsedUnshieldedDetails,
+    trend,
+  };
+}
+
+export function getCommitteeMembers() {
+  const row = db.prepare(`
+    SELECT args, block_height FROM extrinsics
+    WHERE section = 'sessionCommitteeManagement' AND method = 'set'
+    ORDER BY block_height DESC LIMIT 1
+  `).get() as { args: string; block_height: number } | undefined;
+
+  if (!row || !row.args) {
+    return { epoch: 0, size: 0, members: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(row.args);
+    // args is a JSON array: [membersArray, epoch]
+    const membersRaw = Array.isArray(parsed) ? (typeof parsed[0] === 'string' ? JSON.parse(parsed[0]) : parsed[0]) : [];
+    const epoch = Array.isArray(parsed) && parsed.length >= 2 ? parsed[1] : row.block_height;
+
+    const members = (Array.isArray(membersRaw) ? membersRaw : []).map((m: any) => {
+      if (m.permissioned) {
+        return {
+          pubKey: m.permissioned.id || null,
+          auraKey: m.permissioned.keys?.aura || null,
+          grandpaKey: m.permissioned.keys?.grandpa || null,
+          type: 'permissioned',
+        };
+      }
+      // Fallback for other formats
+      return {
+        pubKey: m.id || m.pubKey || null,
+        auraKey: m.keys?.aura || null,
+        grandpaKey: m.keys?.grandpa || null,
+        type: 'unknown',
+      };
+    });
+
+    return { epoch, size: members.length, members };
+  } catch {
+    return { epoch: 0, size: 0, members: [] };
+  }
+}
+
+export function getContractAddresses() {
+  const rows = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp, b.hash as block_hash
+    FROM events e
+    JOIN blocks b ON e.block_height = b.height
+    WHERE e.section = 'midnight' AND e.method = 'ContractDeploy'
+    ORDER BY e.block_height DESC
+  `).all() as { block_height: number; data: string; timestamp: number; block_hash: string }[];
+
+  const contracts = rows.map(row => {
+    try {
+      const parsed = JSON.parse(row.data);
+      return {
+        address: parsed.contractAddress || parsed[1] || null,
+        txHash: parsed.txHash || parsed[0] || null,
+        block: row.block_height,
+        blockHash: row.block_hash,
+        timestamp: row.timestamp,
+      };
+    } catch {
+      return {
+        address: null,
+        txHash: null,
+        block: row.block_height,
+        blockHash: row.block_hash,
+        timestamp: row.timestamp,
+      };
+    }
+  });
+
+  return { total: contracts.length, contracts };
+}
+
+export function getEventBreakdown() {
+  return db.prepare(`
+    SELECT section, method, COUNT(*) as count
+    FROM events
+    GROUP BY section, method
+    ORDER BY count DESC
+  `).all() as { section: string; method: string; count: number }[];
+}

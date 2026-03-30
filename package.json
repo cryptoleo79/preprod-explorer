@@ -1,7 +1,7 @@
 {
-  "name": "midnight-preprod-explorer",
+  "name": "midnight-preview-explorer",
   "version": "1.0.0",
-  "description": "Midnight Preprod Network Explorer & Indexer",
+  "description": "Midnight Preview Network Explorer & Indexer",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -12,7 +12,7 @@
     "api-only": "tsx src/api/server.ts",
     "frontend": "cd frontend && npm run dev"
   },
-  "keywords": ["midnight", "blockchain", "explorer", "indexer", "preprod"],
+  "keywords": ["midnight", "blockchain", "explorer", "indexer", "preview"],
   "author": "",
   "license": "MIT",
   "dependencies": {
