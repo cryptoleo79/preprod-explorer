@@ -624,3 +624,195 @@ export function getEventBreakdown() {
     ORDER BY count DESC
   `).all() as { section: string; method: string; count: number }[];
 }
+
+// --- Governance Dashboard ---
+
+function parseEventData(data: string | null): any {
+  if (!data) return null;
+  try {
+    const outer = JSON.parse(data);
+    if (Array.isArray(outer) && outer.length > 0 && typeof outer[0] === 'string') {
+      try { return JSON.parse(outer[0]); } catch { return outer; }
+    }
+    return outer;
+  } catch { return data; }
+}
+
+export function getGovernanceData() {
+  const councilProposals = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp, b.hash as block_hash
+    FROM events e JOIN blocks b ON e.block_height = b.height
+    WHERE e.section = 'council' AND e.method = 'Proposed'
+    ORDER BY e.block_height DESC
+  `).all() as { block_height: number; data: string; timestamp: number; block_hash: string }[];
+
+  const councilVotes = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp
+    FROM events e
+    WHERE e.section = 'council' AND e.method = 'Voted'
+    ORDER BY e.block_height DESC
+  `).all() as { block_height: number; data: string; timestamp: number }[];
+
+  const tcProposals = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp
+    FROM events e
+    WHERE e.section = 'technicalCommittee' AND e.method = 'Proposed'
+    ORDER BY e.block_height DESC
+  `).all() as { block_height: number; data: string; timestamp: number }[];
+
+  const tcVotes = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp
+    FROM events e
+    WHERE e.section = 'technicalCommittee' AND e.method = 'Voted'
+    ORDER BY e.block_height DESC
+  `).all() as { block_height: number; data: string; timestamp: number }[];
+
+  const authorityResets = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp
+    FROM events e
+    WHERE e.section = 'federatedAuthorityObservation'
+    ORDER BY e.block_height DESC
+  `).all() as { block_height: number; data: string; timestamp: number }[];
+
+  const parsedCouncilProposals = councilProposals.map(r => ({ block_height: r.block_height, block_hash: r.block_hash, data: parseEventData(r.data), timestamp: r.timestamp }));
+  const parsedCouncilVotes = councilVotes.map(r => ({ block_height: r.block_height, data: parseEventData(r.data), timestamp: r.timestamp }));
+  const parsedTcProposals = tcProposals.map(r => ({ block_height: r.block_height, data: parseEventData(r.data), timestamp: r.timestamp }));
+  const parsedTcVotes = tcVotes.map(r => ({ block_height: r.block_height, data: parseEventData(r.data), timestamp: r.timestamp }));
+  const parsedResets = authorityResets.map(r => ({ block_height: r.block_height, data: parseEventData(r.data), timestamp: r.timestamp }));
+
+  const totalActions = councilProposals.length + councilVotes.length + tcProposals.length + tcVotes.length + authorityResets.length;
+  const allTimestamps = [
+    ...councilProposals.map(r => r.timestamp),
+    ...councilVotes.map(r => r.timestamp),
+    ...tcProposals.map(r => r.timestamp),
+    ...tcVotes.map(r => r.timestamp),
+    ...authorityResets.map(r => r.timestamp),
+  ];
+  const lastActivity = allTimestamps.length > 0 ? Math.max(...allTimestamps) : 0;
+
+  return {
+    council: {
+      proposals: parsedCouncilProposals,
+      votes: parsedCouncilVotes,
+      totalProposals: councilProposals.length,
+      totalVotes: councilVotes.length,
+    },
+    technicalCommittee: {
+      proposals: parsedTcProposals,
+      votes: parsedTcVotes,
+      totalProposals: tcProposals.length,
+      totalVotes: tcVotes.length,
+    },
+    authorityResets: parsedResets,
+    summary: {
+      totalGovernanceActions: totalActions,
+      lastActivity,
+    },
+  };
+}
+
+// --- Epoch Timeline ---
+
+export function getEpochTimeline(limit = 50) {
+  const epochHistory = db.prepare(`
+    SELECT * FROM epoch_info ORDER BY epoch DESC LIMIT ?
+  `).all(limit) as any[];
+
+  const sessionChanges = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp
+    FROM events e
+    WHERE e.section = 'session' AND e.method = 'NewSession'
+    ORDER BY e.block_height DESC LIMIT ?
+  `).all(limit) as { block_height: number; data: string; timestamp: number }[];
+
+  const authorityChanges = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp
+    FROM events e
+    WHERE e.section = 'grandpa' AND e.method = 'NewAuthorities'
+    ORDER BY e.block_height DESC LIMIT ?
+  `).all(limit) as { block_height: number; data: string; timestamp: number }[];
+
+  const currentEpoch = epochHistory.length > 0 ? epochHistory[0] : null;
+
+  const parsedSessionChanges = sessionChanges.map(r => ({ block_height: r.block_height, data: parseEventData(r.data), timestamp: r.timestamp }));
+  const parsedAuthorityChanges = authorityChanges.map(r => ({ block_height: r.block_height, data: parseEventData(r.data), timestamp: r.timestamp }));
+
+  // Calculate average epoch duration from history
+  let avgEpochDuration = 0;
+  if (epochHistory.length >= 2) {
+    const durations: number[] = [];
+    for (let i = 0; i < epochHistory.length - 1; i++) {
+      const diff = (epochHistory[i].next_epoch_timestamp || epochHistory[i].recorded_at) - (epochHistory[i + 1].next_epoch_timestamp || epochHistory[i + 1].recorded_at);
+      if (diff > 0) durations.push(diff);
+    }
+    if (durations.length > 0) {
+      avgEpochDuration = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    }
+  }
+
+  return {
+    currentEpoch,
+    epochHistory,
+    sessionChanges: parsedSessionChanges,
+    authorityChanges: parsedAuthorityChanges,
+    stats: {
+      totalSessions: sessionChanges.length,
+      totalAuthorityChanges: authorityChanges.length,
+      avgEpochDuration,
+    },
+  };
+}
+
+// --- Cardano Anchors ---
+
+export function getCardanoAnchors(limit = 50) {
+  const anchors = db.prepare(`
+    SELECT epoch, sidechain_slot, mainchain_epoch, mainchain_slot, next_epoch_timestamp, recorded_at
+    FROM epoch_info
+    ORDER BY epoch DESC
+    LIMIT ?
+  `).all(limit) as { epoch: number; sidechain_slot: number; mainchain_epoch: number; mainchain_slot: number; next_epoch_timestamp: number; recorded_at: number }[];
+
+  const bridgeEvents = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp, e.method
+    FROM events e
+    WHERE e.section = 'cNightObservation' AND e.method IN ('Registration', 'Deregistration', 'MappingAdded')
+    ORDER BY e.block_height DESC
+    LIMIT 20
+  `).all() as { block_height: number; data: string; timestamp: number; method: string }[];
+
+  const currentAnchor = anchors.length > 0 ? {
+    midnightEpoch: anchors[0].epoch,
+    midnightSlot: anchors[0].sidechain_slot,
+    cardanoEpoch: anchors[0].mainchain_epoch,
+    cardanoSlot: anchors[0].mainchain_slot,
+    timestamp: anchors[0].next_epoch_timestamp || anchors[0].recorded_at,
+  } : null;
+
+  const registrations: any[] = [];
+  const deregistrations: any[] = [];
+  const mappings: any[] = [];
+
+  for (const evt of bridgeEvents) {
+    const parsed = { block_height: evt.block_height, data: parseEventData(evt.data), timestamp: evt.timestamp };
+    if (evt.method === 'Registration') registrations.push(parsed);
+    else if (evt.method === 'Deregistration') deregistrations.push(parsed);
+    else if (evt.method === 'MappingAdded') mappings.push(parsed);
+  }
+
+  return {
+    currentAnchor,
+    anchorHistory: anchors,
+    bridgeEvents: {
+      registrations,
+      deregistrations,
+      mappings,
+    },
+    stats: {
+      totalAnchors: anchors.length,
+      totalRegistrations: registrations.length,
+      totalDeregistrations: deregistrations.length,
+      totalMappings: mappings.length,
+    },
+  };
+}
