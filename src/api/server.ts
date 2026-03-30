@@ -22,6 +22,9 @@ import {
   getCommitteeMembers,
   getContractAddresses,
   getEventBreakdown,
+  getGovernanceData,
+  getEpochTimeline,
+  getCardanoAnchors,
   db,
 } from '../indexer/database.js';
 import config from '../config.js';
@@ -756,6 +759,38 @@ app.get('/api/analytics/overview', (req, res) => {
   }
 });
 
+// --- Governance Dashboard API ---
+app.get('/api/governance', (req, res) => {
+  try {
+    const data = getGovernanceData();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Epoch Timeline API ---
+app.get('/api/epochs', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const data = getEpochTimeline(limit);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Cardano Anchors API ---
+app.get('/api/cardano-anchors', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const data = getCardanoAnchors(limit);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export function startAPI() {
   app.listen(config.api.port, () => {
     console.log(`API server running on http://localhost:${config.api.port}`);
@@ -780,6 +815,9 @@ export function startAPI() {
     console.log(`  GET /api/analytics/events - Event type breakdown`);
     console.log(`  GET /api/committee - Current committee members`);
     console.log(`  GET /api/contracts/deployed - Deployed contracts (event-based)`);
+    console.log(`  GET /api/governance - Governance dashboard`);
+    console.log(`  GET /api/epochs - Epoch timeline`);
+    console.log(`  GET /api/cardano-anchors - Cardano anchor points`);
   });
 }
 
