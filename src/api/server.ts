@@ -36,9 +36,10 @@ app.use(cors({ origin: config.api.corsOrigins }));
 app.use(express.json());
 
 // Rewrite non-API paths to /api/ prefix for nginx proxy compatibility
-// (nginx strips /api/preview/ prefix, so backend receives /governance instead of /api/governance)
+// Exclude paths that have their own non-prefixed route aliases
+const aliasedPaths = ['/block/', '/blocks', '/extrinsics', '/extrinsic/', '/stats', '/search', '/analytics/volume', '/health'];
 app.use((req, res, next) => {
-  if (!req.path.startsWith('/api/') && !req.path.startsWith('/health') && req.path !== '/' && !req.path.match(/\.(js|css|html|ico|png|svg|woff)$/)) {
+  if (!req.path.startsWith('/api/') && req.path !== '/' && !req.path.match(/\.(js|css|html|ico|png|svg|woff)$/) && !aliasedPaths.some(p => req.path.startsWith(p))) {
     req.url = '/api' + req.url;
   }
   next();
