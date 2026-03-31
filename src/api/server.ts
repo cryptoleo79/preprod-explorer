@@ -37,7 +37,7 @@ app.use(express.json());
 
 // Rewrite non-API paths to /api/ prefix for nginx proxy compatibility
 // Exclude paths that have their own non-prefixed route aliases
-const aliasedPaths = ['/block/', '/blocks', '/extrinsics', '/extrinsic/', '/stats', '/search', '/analytics/volume', '/health'];
+const aliasedPaths = ['/block/', '/blocks', '/extrinsics', '/extrinsic/', '/stats', '/search', '/analytics/volume', '/health', '/docs'];
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api/') && req.path !== '/' && !req.path.match(/\.(js|css|html|ico|png|svg|woff)$/) && !aliasedPaths.some(p => req.path.startsWith(p))) {
     req.url = '/api' + req.url;
@@ -799,6 +799,764 @@ app.get('/api/cardano-anchors', (req, res) => {
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// --- API Documentation ---
+function getDocsHTML(baseUrl: string) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NightForge API Documentation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    pre { white-space: pre-wrap; word-break: break-all; }
+    .copy-btn:active { transform: scale(0.95); }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            midnight: { 50:'#fff7ed',100:'#ffedd5',200:'#fed7aa',300:'#fdba74',400:'#fb923c',500:'#ff6b35',600:'#ea580c',700:'#c2410c',800:'#9a3412',900:'#7c2d12' },
+            dark: { 50:'#1e293b',100:'#1a1a2e',200:'#151525',300:'#0f0f1a',400:'#0a0a0f' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-dark-400 text-gray-200 min-h-screen flex">
+  <!-- Sidebar -->
+  <aside class="sidebar w-64 bg-dark-300 border-r border-slate-800 fixed h-full overflow-y-auto hidden lg:block">
+    <div class="p-5 border-b border-slate-800">
+      <h1 class="text-xl font-bold text-midnight-500">NightForge API</h1>
+      <p class="text-xs text-slate-500 mt-1">${baseUrl}</p>
+    </div>
+    <nav class="p-4 space-y-4 text-sm">
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Core</h3>
+        <ul class="space-y-1">
+          <li><a href="#health" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/health</a></li>
+          <li><a href="#network" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/network</a></li>
+          <li><a href="#stats" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/stats</a></li>
+          <li><a href="#blocks" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/blocks</a></li>
+          <li><a href="#block-detail" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/blocks/:id</a></li>
+          <li><a href="#block-extrinsics" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/blocks/:h/extrinsics</a></li>
+          <li><a href="#block-events" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/blocks/:h/events</a></li>
+          <li><a href="#extrinsics" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/extrinsics</a></li>
+          <li><a href="#extrinsic-detail" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/extrinsics/:hash</a></li>
+          <li><a href="#extrinsic-decoded" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/extrinsics/:hash/decoded</a></li>
+          <li><a href="#extrinsic-stats" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/extrinsics/stats</a></li>
+          <li><a href="#search" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/search</a></li>
+          <li><a href="#validators" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/validators</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Analytics</h3>
+        <ul class="space-y-1">
+          <li><a href="#overview" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/analytics/overview</a></li>
+          <li><a href="#extrinsic-types" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/analytics/extrinsic-types</a></li>
+          <li><a href="#block-rate" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/analytics/block-rate</a></li>
+          <li><a href="#tx-classification" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/analytics/tx-classification</a></li>
+          <li><a href="#events-breakdown" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/analytics/events</a></li>
+          <li><a href="#volume" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/analytics/volume</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Privacy</h3>
+        <ul class="space-y-1">
+          <li><a href="#privacy" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/analytics/privacy</a></li>
+          <li><a href="#midnight-txs" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/midnight-txs</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Bridge</h3>
+        <ul class="space-y-1">
+          <li><a href="#bridge" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/analytics/bridge</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Governance</h3>
+        <ul class="space-y-1">
+          <li><a href="#governance" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/governance</a></li>
+          <li><a href="#committee" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/committee</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Epochs</h3>
+        <ul class="space-y-1">
+          <li><a href="#epoch" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/epoch</a></li>
+          <li><a href="#epochs" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/epochs</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Cardano</h3>
+        <ul class="space-y-1">
+          <li><a href="#cardano-anchors" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/cardano-anchors</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Contracts</h3>
+        <ul class="space-y-1">
+          <li><a href="#contracts" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/analytics/contracts</a></li>
+          <li><a href="#deployed" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/contracts/deployed</a></li>
+        </ul>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Main content -->
+  <main class="flex-1 lg:ml-64">
+    <div class="max-w-4xl mx-auto p-6 lg:p-10">
+      <header class="mb-10">
+        <h1 class="text-3xl font-bold text-white mb-2">NightForge Explorer API</h1>
+        <p class="text-slate-400 mb-4">Public REST API for the Midnight blockchain explorer. All endpoints return JSON unless otherwise noted.</p>
+        <div class="flex items-center gap-3 text-sm">
+          <span class="bg-dark-100 border border-slate-700 rounded px-3 py-1 mono text-midnight-400">${baseUrl}</span>
+          <span class="bg-emerald-900/30 text-emerald-400 border border-emerald-800 rounded px-2 py-1 text-xs font-medium">CORS Enabled</span>
+          <span class="bg-blue-900/30 text-blue-400 border border-blue-800 rounded px-2 py-1 text-xs font-medium">No Auth Required</span>
+        </div>
+      </header>
+
+      <!-- CORE -->
+      <section class="mb-12">
+        <h2 class="text-xl font-semibold text-midnight-400 border-b border-slate-800 pb-2 mb-6">Core</h2>
+
+        <div id="health" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/health</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/health')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/health" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Health check endpoint. Returns service status and current timestamp.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "status": "ok",
+  "timestamp": "2026-03-31T12:00:00.000Z",
+  "network": "Midnight Preview"
+}</code></pre>
+        </div>
+
+        <div id="network" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/network</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/network')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/network" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Network configuration and node details.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "name": "Midnight Preview",
+  "rpcEndpoint": "wss://...",
+  "genesisHash": "0x...",
+  "chainType": "Live",
+  "node": { "version": "...", "specVersion": 1 },
+  "cardanoNetwork": "preview"
+}</code></pre>
+        </div>
+
+        <div id="stats" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/stats</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/stats')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/stats" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Indexer statistics including total blocks, extrinsics, events, and current epoch.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "blocks": 150000, "extrinsics": 500000, "events": 1200000,
+  "totalBlocks": 150000, "totalExtrinsics": 500000, "totalEvents": 1200000,
+  "latestBlock": 150000,
+  "epoch": { "epoch": 42, "sidechain_slot": 12345, "mainchain_epoch": 500 }
+}</code></pre>
+        </div>
+
+        <div id="blocks" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/blocks</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/blocks?limit=10')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/blocks?limit=10" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Paginated list of blocks (newest first).</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">limit</code> (max 100, default 50), <code class="text-slate-400">offset</code> (default 0)</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "height": 150000, "hash": "0xabc...", "parent_hash": "0xdef...",
+    "extrinsics_count": 3, "events_count": 12, "timestamp": 1711882800 }
+]</code></pre>
+        </div>
+
+        <div id="block-detail" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/blocks/:heightOrHash</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/blocks/1')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/blocks/1" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Get a single block by height (number) or hash (hex string).</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "height": 1, "hash": "0xabc...", "parent_hash": "0xdef...",
+  "state_root": "0x...", "extrinsics_root": "0x...",
+  "extrinsics_count": 1, "events_count": 5, "timestamp": 1711800000
+}</code></pre>
+        </div>
+
+        <div id="block-extrinsics" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/blocks/:height/extrinsics</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/blocks/1/extrinsics')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/blocks/1/extrinsics" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">All extrinsics in a specific block.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "hash": "0x...", "block_height": 1, "index": 0, "section": "timestamp",
+    "method": "set", "signer": null, "success": 1, "timestamp": 1711800000 }
+]</code></pre>
+        </div>
+
+        <div id="block-events" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/blocks/:height/events</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/blocks/1/events')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/blocks/1/events" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">All events emitted in a specific block.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "block_height": 1, "index": 0, "section": "system",
+    "method": "ExtrinsicSuccess", "data": "..." }
+]</code></pre>
+        </div>
+
+        <div id="extrinsics" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/extrinsics</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/extrinsics?limit=10')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/extrinsics?limit=10" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Recent extrinsics across all blocks.</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">limit</code> (max 100, default 50)</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "hash": "0x...", "block_height": 150000, "section": "midnight",
+    "method": "transact", "signer": "5G...", "success": 1 }
+]</code></pre>
+        </div>
+
+        <div id="extrinsic-detail" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/extrinsics/:hash</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/extrinsics/0x...')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Get a single extrinsic by its hash.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "hash": "0x...", "block_height": 150000, "index": 1,
+  "section": "midnight", "method": "transact",
+  "signer": "5G...", "args": "0x...", "success": 1
+}</code></pre>
+        </div>
+
+        <div id="extrinsic-decoded" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/extrinsics/:hash/decoded</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/extrinsics/0x.../decoded')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Get a Midnight extrinsic with decoded transaction details (shielding type, inputs, outputs).</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "hash": "0x...", "section": "midnight", "method": "transact",
+  "decoded": { "txType": "transfer", "shieldingType": "shielded", "inputs": 2, "outputs": 2 }
+}</code></pre>
+        </div>
+
+        <div id="extrinsic-stats" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/extrinsics/stats</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/extrinsics/stats')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/extrinsics/stats" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Extrinsic statistics: totals, success/fail counts.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "total": 500000, "successful": 498000, "failed": 2000
+}</code></pre>
+        </div>
+
+        <div id="search" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/search?q=...</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/search?q=1')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/search?q=1" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Search by block height (number) or hash (block/extrinsic).</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">q</code> (required) - block height or hex hash</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{ "type": "block", "data": { "height": 1, "hash": "0x..." } }</code></pre>
+        </div>
+
+        <div id="validators" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/validators</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/validators')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/validators" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">List of known validators, sorted by last seen.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "address": "5G...", "last_seen": 1711882800, "blocks_produced": 500 }
+]</code></pre>
+        </div>
+      </section>
+
+      <!-- ANALYTICS -->
+      <section class="mb-12">
+        <h2 class="text-xl font-semibold text-midnight-400 border-b border-slate-800 pb-2 mb-6">Analytics</h2>
+
+        <div id="overview" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/analytics/overview</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/analytics/overview')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/analytics/overview" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Comprehensive network overview: blocks, TPS, shielded ratio, committee size, epoch info, and more.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "network": "Midnight Preview", "blocks": 150000, "extrinsics": 500000,
+  "midnightTxs": 120000, "bridgeOps": 5000, "avgBlockTime": 6.2,
+  "tps": 1.3, "shieldedRatio": 0.85, "contractDeploys": 45,
+  "contractCalls": 80000, "committeeSize": 7
+}</code></pre>
+        </div>
+
+        <div id="extrinsic-types" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/analytics/extrinsic-types</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/analytics/extrinsic-types')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/analytics/extrinsic-types" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Top 20 extrinsic types by frequency (section + method).</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "section": "midnight", "method": "transact", "count": 120000 },
+  { "section": "timestamp", "method": "set", "count": 150000 }
+]</code></pre>
+        </div>
+
+        <div id="block-rate" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/analytics/block-rate</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/analytics/block-rate?hours=24')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/analytics/block-rate?hours=24" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Hourly block production and extrinsic counts.</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">hours</code> (default 24)</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "hour": 1711882800, "blocks": 600, "extrinsics": 1800 }
+]</code></pre>
+        </div>
+
+        <div id="tx-classification" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/analytics/tx-classification</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/analytics/tx-classification')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/analytics/tx-classification" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Classifies recent Midnight transactions as shielded/unshielded/mixed.</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">limit</code> (max 2000, default 500)</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "analyzed": 500,
+  "shielding": { "shielded": 400, "unshielded": 50, "mixed": 30, "unknown": 20 },
+  "types": { "transfer": 300, "contract_call": 150, "deploy": 50 }
+}</code></pre>
+        </div>
+
+        <div id="events-breakdown" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/analytics/events</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/analytics/events')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/analytics/events" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Event type breakdown across all indexed blocks.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "section": "system", "method": "ExtrinsicSuccess", "count": 490000 },
+  { "section": "midnight", "method": "Transacted", "count": 120000 }
+]</code></pre>
+        </div>
+
+        <div id="volume" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/analytics/volume</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/analytics/volume?hours=24')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/analytics/volume?hours=24" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Hourly transaction volume.</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">hours</code> (default 24)</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "hour": "2026-03-31 12:00:00", "count": 150 }
+]</code></pre>
+        </div>
+      </section>
+
+      <!-- PRIVACY -->
+      <section class="mb-12">
+        <h2 class="text-xl font-semibold text-midnight-400 border-b border-slate-800 pb-2 mb-6">Privacy</h2>
+
+        <div id="privacy" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/analytics/privacy</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/analytics/privacy?hours=24')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/analytics/privacy?hours=24" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Privacy dashboard: shielded/unshielded ratios, contract deploys/calls, and trends (event-based).</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">hours</code> (max 168, default 24). Cached for 60s.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "totalMidnightTxs": 500, "shielded": 400, "unshielded": 80,
+  "contractDeploys": 5, "contractCalls": 120,
+  "shieldedRatio": 0.83, "trend": [...]
+}</code></pre>
+        </div>
+
+        <div id="midnight-txs" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/midnight-txs</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/midnight-txs?limit=10')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/midnight-txs?limit=10" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Recent Midnight-specific transactions with decoded shielding info.</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">limit</code> (max 100, default 20)</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "hash": "0x...", "block_height": 150000, "timestamp": 1711882800,
+    "signer": "5G...", "shieldingType": "shielded", "txType": "transfer" }
+]</code></pre>
+        </div>
+      </section>
+
+      <!-- BRIDGE -->
+      <section class="mb-12">
+        <h2 class="text-xl font-semibold text-midnight-400 border-b border-slate-800 pb-2 mb-6">Bridge</h2>
+
+        <div id="bridge" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/analytics/bridge</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/analytics/bridge?hours=24')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/analytics/bridge?hours=24" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Cardano bridge operations: totals, trends, and recent bridge transactions.</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">hours</code> (max 168, default 24)</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "totalBridgeOps": 5000, "last24h": 120, "trend": [...],
+  "recentBridgeOps": [
+    { "hash": "0x...", "block_height": 149990, "timestamp": 1711882000,
+      "args_summary": "Cardano block #12345 (0xabc...)" }
+  ]
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- GOVERNANCE -->
+      <section class="mb-12">
+        <h2 class="text-xl font-semibold text-midnight-400 border-b border-slate-800 pb-2 mb-6">Governance</h2>
+
+        <div id="governance" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/governance</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/governance')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/governance" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Governance dashboard: committee updates, proposals, and voting data.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "committeeUpdates": [...],
+  "recentGovernanceEvents": [...]
+}</code></pre>
+        </div>
+
+        <div id="committee" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/committee</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/committee')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/committee" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Current committee members and their status.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "address": "5G...", "role": "member", "since_epoch": 10 }
+]</code></pre>
+        </div>
+      </section>
+
+      <!-- EPOCHS -->
+      <section class="mb-12">
+        <h2 class="text-xl font-semibold text-midnight-400 border-b border-slate-800 pb-2 mb-6">Epochs</h2>
+
+        <div id="epoch" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/epoch</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/epoch')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/epoch" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Current epoch information: sidechain epoch/slot, mainchain epoch/slot.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "epoch": 42, "sidechain_slot": 12345,
+  "mainchain_epoch": 500, "mainchain_slot": 130000000
+}</code></pre>
+        </div>
+
+        <div id="epochs" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/epochs</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/epochs?limit=20')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/epochs?limit=20" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Epoch timeline: historical epoch data.</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">limit</code> (max 200, default 50)</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "epoch": 42, "sidechain_slot": 12345, "mainchain_epoch": 500,
+    "block_height": 149000, "timestamp": 1711880000 }
+]</code></pre>
+        </div>
+      </section>
+
+      <!-- CARDANO -->
+      <section class="mb-12">
+        <h2 class="text-xl font-semibold text-midnight-400 border-b border-slate-800 pb-2 mb-6">Cardano</h2>
+
+        <div id="cardano-anchors" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/cardano-anchors</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/cardano-anchors?limit=20')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/cardano-anchors?limit=20" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Cardano anchor points: sidechain state anchored to Cardano.</p>
+          <p class="text-xs text-slate-500 mb-3">Params: <code class="text-slate-400">limit</code> (max 200, default 50)</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "block_height": 149500, "mainchain_block": 12345678,
+    "mainchain_hash": "0x...", "timestamp": 1711881000 }
+]</code></pre>
+        </div>
+      </section>
+
+      <!-- CONTRACTS -->
+      <section class="mb-12">
+        <h2 class="text-xl font-semibold text-midnight-400 border-b border-slate-800 pb-2 mb-6">Contracts</h2>
+
+        <div id="contracts" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/analytics/contracts</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/analytics/contracts')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/analytics/contracts" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">Contract leaderboard: most active contracts by call count.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "contracts": [
+    { "address": "0x...", "calls": 5000, "deploys": 1, "last_call": 1711882800 }
+  ]
+}</code></pre>
+        </div>
+
+        <div id="deployed" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/contracts/deployed</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/contracts/deployed')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/contracts/deployed" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-3">All deployed contract addresses discovered from on-chain events.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>[
+  { "address": "0x...", "deployed_at_block": 50000, "deployer": "5G..." }
+]</code></pre>
+        </div>
+      </section>
+
+      <footer class="border-t border-slate-800 pt-6 text-sm text-slate-500 text-center">
+        <p>NightForge Explorer &mdash; Built for the Midnight community</p>
+        <p class="mt-1">All endpoints are public and rate-limited. Please be respectful.</p>
+      </footer>
+    </div>
+  </main>
+
+  <script>
+    function copyUrl(path) {
+      const url = '${baseUrl}' + path;
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = event.target;
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.classList.add('text-emerald-400');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('text-emerald-400'); }, 1500);
+      });
+    }
+
+    // Smooth scroll for sidebar links
+    document.querySelectorAll('aside a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        const target = document.querySelector(a.getAttribute('href'));
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+
+    // Highlight active section in sidebar
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          document.querySelectorAll('aside a').forEach(a => a.classList.remove('bg-dark-100', 'text-white'));
+          const link = document.querySelector('aside a[href="#' + entry.target.id + '"]');
+          if (link) { link.classList.add('bg-dark-100', 'text-white'); }
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+
+    document.querySelectorAll('[id]').forEach(el => {
+      if (el.closest('main')) observer.observe(el);
+    });
+  </script>
+</body>
+</html>`;
+}
+
+app.get('/api/docs', (req, res) => {
+  res.type('html').send(getDocsHTML('https://preview.nightforge.jp'));
+});
+
+app.get('/docs', (req, res) => {
+  res.type('html').send(getDocsHTML('https://preview.nightforge.jp'));
 });
 
 export function startAPI() {
