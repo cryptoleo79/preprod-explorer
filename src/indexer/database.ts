@@ -384,33 +384,35 @@ export function getBridgeAnalytics(hours: number) {
 }
 
 export function getContractAnalytics() {
-  const topContracts = db.prepare(`
-    SELECT
-      signer as address,
-      COUNT(*) as interactions,
-      MIN(timestamp) as firstSeen,
-      MAX(timestamp) as lastSeen
-    FROM extrinsics
-    WHERE section = 'midnight' AND method = 'sendMnTransaction' AND signer IS NOT NULL
-    GROUP BY signer
-    ORDER BY interactions DESC
-    LIMIT 50
-  `).all() as { address: string; interactions: number; firstSeen: number; lastSeen: number }[];
+  const deployedContracts = db.prepare(`
+    SELECT e.block_height, e.data, e.timestamp
+    FROM events e
+    WHERE e.section = 'midnight' AND e.method = 'ContractDeploy'
+    ORDER BY e.block_height DESC
+  `).all() as { block_height: number; data: string; timestamp: number }[];
 
-  const totalContracts = topContracts.length;
+  const contractCalls = db.prepare(`
+    SELECT COUNT(*) as count FROM events WHERE section = 'midnight' AND method = 'ContractCall'
+  `).get() as { count: number };
 
   const deploymentsPerDay = db.prepare(`
-    SELECT
-      date(timestamp, 'unixepoch') as day,
-      COUNT(*) as count
-    FROM extrinsics
-    WHERE section = 'midnight' AND method = 'sendMnTransaction'
-    GROUP BY day
-    ORDER BY day DESC
-    LIMIT 30
+    SELECT date(timestamp, 'unixepoch') as day, COUNT(*) as count
+    FROM extrinsics WHERE section = 'midnight' AND method = 'sendMnTransaction'
+    GROUP BY day ORDER BY day DESC LIMIT 30
   `).all() as { day: string; count: number }[];
 
-  return { totalContracts, topContracts, deploymentsPerDay };
+  const topContracts = deployedContracts.map(c => {
+    let address = '', txHash = '';
+    try {
+      const outer = JSON.parse(c.data);
+      const inner = typeof outer[0] === 'string' ? JSON.parse(outer[0]) : outer[0];
+      address = inner.contractAddress || '';
+      txHash = inner.txHash || '';
+    } catch {}
+    return { address, txHash, interactions: 0, firstSeen: c.timestamp, lastSeen: c.timestamp, block: c.block_height };
+  });
+
+  return { totalContracts: topContracts.length, totalCalls: contractCalls.count, topContracts, deploymentsPerDay };
 }
 
 export function getNetworkOverviewData() {
