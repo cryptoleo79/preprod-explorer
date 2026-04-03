@@ -764,6 +764,8 @@ app.get('/api/analytics/overview', (req, res) => {
       nodeVersion: config.node.version || 'unknown',
       specVersion: config.node.specVersion || 0,
       epoch: data.epoch || null,
+      genesisTime: data.genesisTime || null,
+      networkAgeDays: data.networkAgeDays || 0,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

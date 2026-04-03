@@ -446,7 +446,12 @@ export function getNetworkOverviewData() {
   const eventBreakdown = getEventBreakdown();
   const committeeData = getCommitteeMembers();
 
-  return { blocksCount, extrinsicsCount, midnightTxs, bridgeOps, committeeUpdates, avgBlockTime, tps, epoch, contractDeploys, contractCalls, committeeSize: committeeData.size, eventBreakdown };
+  // Genesis time for network age
+  const genesisBlock = db.prepare('SELECT timestamp FROM blocks ORDER BY height ASC LIMIT 1').get() as { timestamp?: number } | undefined;
+  const genesisTime = genesisBlock?.timestamp || 0;
+  const networkAgeDays = genesisTime ? Math.floor((Date.now() / 1000 - genesisTime) / 86400) : 0;
+
+  return { blocksCount, extrinsicsCount, midnightTxs, bridgeOps, committeeUpdates, avgBlockTime, tps, epoch, contractDeploys, contractCalls, committeeSize: committeeData.size, eventBreakdown, genesisTime, networkAgeDays };
 }
 
 // --- Event-based analytics functions ---
