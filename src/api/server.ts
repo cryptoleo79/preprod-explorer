@@ -883,35 +883,29 @@ app.get('/api/analytics/dust', (req, res) => {
 // --- Block Producers Leaderboard (queries official Midnight indexer) ---
 let blockProducerCache: { data: any; ts: number } | null = null;
 
-app.get('/api/block-producers', async (req, res) => {
+async function handleBlockProducers(req: any, res: any) {
   try {
     const now = Date.now();
-    // Return cached result if less than 5 minutes old
     if (blockProducerCache && now - blockProducerCache.ts < 300000) {
       return res.json(blockProducerCache.data);
     }
 
     const limit = Math.min(parseInt(req.query.limit as string) || 500, 2000);
 
-    // Query the official indexer for the latest block height
     const response = await fetch('https://indexer.preprod.midnight.network/api/v4/graphql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: `{ block { height } }`
-      }),
+      body: JSON.stringify({ query: `{ block { height } }` }),
       signal: AbortSignal.timeout(10000),
     });
     const latestData = await response.json() as any;
     const latestHeight = latestData?.data?.block?.height || 0;
 
-    // Sample block authors at various heights
     const sampleHeights: number[] = [];
     for (let h = latestHeight; h > Math.max(0, latestHeight - limit) && sampleHeights.length < 100; h -= Math.max(1, Math.floor(limit / 100))) {
       sampleHeights.push(h);
     }
 
-    // Batch query - get 10 blocks at a time
     const authors: Record<string, number> = {};
     const batchSize = 10;
     for (let i = 0; i < sampleHeights.length; i += batchSize) {
@@ -934,7 +928,6 @@ app.get('/api/block-producers', async (req, res) => {
       }
     }
 
-    // Sort by blocks produced
     const producers = Object.entries(authors)
       .map(([pubkey, blocks]) => ({ pubkey, blocks, percentage: 0 }))
       .sort((a, b) => b.blocks - a.blocks);
@@ -944,7 +937,6 @@ app.get('/api/block-producers', async (req, res) => {
       p.percentage = totalSampled > 0 ? Math.round((p.blocks / totalSampled) * 10000) / 100 : 0;
     });
 
-    // Map aura keys to validator names from committee data
     try {
       const committeeData = getCommitteeMembers();
       const auraMap: Record<string, { name: string; type: string }> = {};
@@ -956,38 +948,27 @@ app.get('/api/block-producers', async (req, res) => {
       }
       producers.forEach((p: any) => {
         const match = auraMap[p.pubkey];
-        if (match) {
-          p.name = match.name;
-          p.type = match.type;
-        }
+        if (match) { p.name = match.name; p.type = match.type; }
       });
     } catch {}
 
-    const result = {
-      totalBlocks: latestHeight,
-      sampled: totalSampled,
-      producers,
-    };
-
+    const result = { totalBlocks: latestHeight, sampled: totalSampled, producers };
     blockProducerCache = { data: result, ts: now };
     res.json(result);
   } catch (error: any) {
-    // Return stale cache on error if available
     if (blockProducerCache) return res.json(blockProducerCache.data);
     res.status(500).json({ error: error.message });
   }
-});
+}
 
-app.get('/block-producers', (req, res) => {
-  res.redirect(307, '/api/block-producers' + (req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''));
-});
+app.get('/api/block-producers', handleBlockProducers);
+app.get('/block-producers', handleBlockProducers);
 
 // --- Enriched Transaction Data from Official Indexer ---
-app.get('/api/tx-enriched/:hash', async (req, res) => {
+async function handleTxEnriched(req: any, res: any) {
   try {
     const hash = req.params.hash.startsWith('0x') ? req.params.hash.slice(2) : req.params.hash;
 
-    // Query official indexer for rich tx data
     const resp = await fetch('https://indexer.preprod.midnight.network/api/v4/graphql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -998,10 +979,8 @@ app.get('/api/tx-enriched/:hash', async (req, res) => {
     });
     const data = await resp.json() as any;
 
-    // Also get local data
     const localTx = getExtrinsicByHash('0x' + hash) || getExtrinsicByHash(hash);
 
-    // Map block author to validator name
     let authorName: string | null = null;
     try {
       const enrichedTx = data?.data?.transactions?.[0];
@@ -1018,19 +997,14 @@ app.get('/api/tx-enriched/:hash', async (req, res) => {
       }
     } catch {}
 
-    res.json({
-      local: localTx,
-      enriched: data?.data?.transactions?.[0] || null,
-      authorName,
-    });
+    res.json({ local: localTx, enriched: data?.data?.transactions?.[0] || null, authorName });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
-});
+}
 
-app.get('/tx-enriched/:hash', (req, res) => {
-  res.redirect(307, '/api/tx-enriched/' + req.params.hash);
-});
+app.get('/api/tx-enriched/:hash', handleTxEnriched);
+app.get('/tx-enriched/:hash', handleTxEnriched);
 
 // --- API Documentation ---
 function getDocsHTML(baseUrl: string) {
