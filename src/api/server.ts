@@ -25,6 +25,7 @@ import {
   getGovernanceData,
   getEpochTimeline,
   getCardanoAnchors,
+  getAddressActivity,
   db,
 } from '../indexer/database.js';
 import config from '../config.js';
@@ -32,12 +33,12 @@ import { decodeMidnightTransaction, classifyMidnightTx } from '../midnight-decod
 
 const app = express();
 
-app.use(cors({ origin: config.api.corsOrigins }));
+app.use(cors({ origin: true }));
 app.use(express.json());
 
 // Rewrite non-API paths to /api/ prefix for nginx proxy compatibility
 // Exclude paths that have their own non-prefixed route aliases
-const aliasedPaths = ['/block/', '/blocks', '/extrinsics', '/extrinsic/', '/stats', '/search', '/analytics/volume', '/health', '/docs'];
+const aliasedPaths = ['/block/', '/blocks', '/extrinsics', '/extrinsic/', '/stats', '/search', '/analytics/volume', '/health', '/docs', '/block-producers', '/address/', '/tx-enriched/'];
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api/') && req.path !== '/' && !req.path.match(/\.(js|css|html|ico|png|svg|woff)$/) && !aliasedPaths.some(p => req.path.startsWith(p))) {
     req.url = '/api' + req.url;
@@ -801,6 +802,239 @@ app.get('/api/cardano-anchors', (req, res) => {
   }
 });
 
+// --- Address Lookup API ---
+app.get('/api/address/:address', (req, res) => {
+  try {
+    const { address } = req.params;
+    if (!address) {
+      return res.status(400).json({ error: 'Address parameter is required' });
+    }
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const data = getAddressActivity(address, limit);
+    if (data.transactionCount === 0 && data.events.length === 0) {
+      return res.status(404).json({ error: 'Address not found', address });
+    }
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/address/:address', (req, res) => {
+  try {
+    const { address } = req.params;
+    if (!address) {
+      return res.status(400).json({ error: 'Address parameter is required' });
+    }
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const data = getAddressActivity(address, limit);
+    if (data.transactionCount === 0 && data.events.length === 0) {
+      return res.status(404).json({ error: 'Address not found', address });
+    }
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- DUST Fee Tracker API ---
+app.get('/api/analytics/dust', (req, res) => {
+  try {
+    // Count dust-related events from our events table
+    const dustEvents = db.prepare(`
+      SELECT section, method, COUNT(*) as count
+      FROM events
+      WHERE section IN ('dust', 'dustSystem', 'midnightSystem')
+         OR method LIKE '%dust%' OR method LIKE '%Dust%' OR method LIKE '%fee%' OR method LIKE '%Fee%'
+      GROUP BY section, method
+      ORDER BY count DESC
+    `).all();
+
+    // Get fee-related data from extrinsics
+    // On Midnight, fees are paid in DUST which is tracked through events
+    // Count transactions per hour to estimate DUST consumption
+    const hourly = db.prepare(`
+      SELECT
+        datetime((timestamp / 3600) * 3600, 'unixepoch') as hour,
+        COUNT(*) as txs
+      FROM extrinsics
+      WHERE timestamp >= ? AND section != 'timestamp'
+      GROUP BY (timestamp / 3600)
+      ORDER BY hour DESC
+      LIMIT 48
+    `).all(Math.floor(Date.now()/1000) - 172800);
+
+    // Total non-timestamp extrinsics (each consumes DUST)
+    const totalTxs = db.prepare(`
+      SELECT COUNT(*) as count FROM extrinsics WHERE section != 'timestamp'
+    `).get() as any;
+
+    res.json({
+      totalTransactions: totalTxs.count,
+      dustEvents,
+      hourlyActivity: hourly,
+      note: "Each transaction on Midnight consumes DUST as a fee. DUST is generated from NIGHT tokens over time."
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Block Producers Leaderboard (queries official Midnight indexer) ---
+let blockProducerCache: { data: any; ts: number } | null = null;
+
+app.get('/api/block-producers', async (req, res) => {
+  try {
+    const now = Date.now();
+    // Return cached result if less than 5 minutes old
+    if (blockProducerCache && now - blockProducerCache.ts < 300000) {
+      return res.json(blockProducerCache.data);
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 500, 2000);
+
+    // Query the official indexer for the latest block height
+    const response = await fetch('https://indexer.preprod.midnight.network/api/v4/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `{ block { height } }`
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const latestData = await response.json() as any;
+    const latestHeight = latestData?.data?.block?.height || 0;
+
+    // Sample block authors at various heights
+    const sampleHeights: number[] = [];
+    for (let h = latestHeight; h > Math.max(0, latestHeight - limit) && sampleHeights.length < 100; h -= Math.max(1, Math.floor(limit / 100))) {
+      sampleHeights.push(h);
+    }
+
+    // Batch query - get 10 blocks at a time
+    const authors: Record<string, number> = {};
+    const batchSize = 10;
+    for (let i = 0; i < sampleHeights.length; i += batchSize) {
+      const batch = sampleHeights.slice(i, i + batchSize);
+      const queries = batch.map((h, idx) => `b${idx}: block(offset: { height: ${h} }) { height author }`).join('\n');
+      const batchResp = await fetch('https://indexer.preprod.midnight.network/api/v4/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `{ ${queries} }` }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const batchData = await batchResp.json() as any;
+      if (batchData?.data) {
+        for (const key of Object.keys(batchData.data)) {
+          const block = batchData.data[key];
+          if (block?.author) {
+            authors[block.author] = (authors[block.author] || 0) + 1;
+          }
+        }
+      }
+    }
+
+    // Sort by blocks produced
+    const producers = Object.entries(authors)
+      .map(([pubkey, blocks]) => ({ pubkey, blocks, percentage: 0 }))
+      .sort((a, b) => b.blocks - a.blocks);
+
+    const totalSampled = producers.reduce((s, p) => s + p.blocks, 0);
+    producers.forEach(p => {
+      p.percentage = totalSampled > 0 ? Math.round((p.blocks / totalSampled) * 10000) / 100 : 0;
+    });
+
+    // Map aura keys to validator names from committee data
+    try {
+      const committeeData = getCommitteeMembers();
+      const auraMap: Record<string, { name: string; type: string }> = {};
+      if (committeeData && committeeData.members) {
+        committeeData.members.forEach((m: any, i: number) => {
+          const aura = (m.auraKey || '').replace('0x', '');
+          auraMap[aura] = { name: `Validator #${i + 1}`, type: m.type };
+        });
+      }
+      producers.forEach((p: any) => {
+        const match = auraMap[p.pubkey];
+        if (match) {
+          p.name = match.name;
+          p.type = match.type;
+        }
+      });
+    } catch {}
+
+    const result = {
+      totalBlocks: latestHeight,
+      sampled: totalSampled,
+      producers,
+    };
+
+    blockProducerCache = { data: result, ts: now };
+    res.json(result);
+  } catch (error: any) {
+    // Return stale cache on error if available
+    if (blockProducerCache) return res.json(blockProducerCache.data);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/block-producers', async (req, res) => {
+  // Alias without /api prefix
+  req.url = '/api/block-producers' + (req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '');
+  app.handle(req, res);
+});
+
+// --- Enriched Transaction Data from Official Indexer ---
+app.get('/api/tx-enriched/:hash', async (req, res) => {
+  try {
+    const hash = req.params.hash.startsWith('0x') ? req.params.hash.slice(2) : req.params.hash;
+
+    // Query official indexer for rich tx data
+    const resp = await fetch('https://indexer.preprod.midnight.network/api/v4/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `{ transactions(offset: { hash: "${hash}" }) { hash id protocolVersion contractActions { __typename address state } unshieldedCreatedOutputs { value } unshieldedSpentOutputs { value } zswapLedgerEvents { __typename } dustLedgerEvents { __typename } block { height author timestamp } } }`
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await resp.json() as any;
+
+    // Also get local data
+    const localTx = getExtrinsicByHash('0x' + hash) || getExtrinsicByHash(hash);
+
+    // Map block author to validator name
+    let authorName: string | null = null;
+    try {
+      const enrichedTx = data?.data?.transactions?.[0];
+      if (enrichedTx?.block?.author) {
+        const committeeData = getCommitteeMembers();
+        if (committeeData && committeeData.members) {
+          committeeData.members.forEach((m: any, i: number) => {
+            const aura = (m.auraKey || '').replace('0x', '');
+            if (aura === enrichedTx.block.author) {
+              authorName = `Validator #${i + 1}`;
+            }
+          });
+        }
+      }
+    } catch {}
+
+    res.json({
+      local: localTx,
+      enriched: data?.data?.transactions?.[0] || null,
+      authorName,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/tx-enriched/:hash', async (req, res) => {
+  req.url = '/api/tx-enriched/' + req.params.hash;
+  app.handle(req, res);
+});
+
 // --- API Documentation ---
 function getDocsHTML(baseUrl: string) {
   return `<!DOCTYPE html>
@@ -944,7 +1178,7 @@ function getDocsHTML(baseUrl: string) {
           <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
   "status": "ok",
   "timestamp": "2026-03-31T12:00:00.000Z",
-  "network": "Midnight Preview"
+  "network": "Midnight Preprod"
 }</code></pre>
         </div>
 
@@ -961,12 +1195,12 @@ function getDocsHTML(baseUrl: string) {
           </div>
           <p class="text-sm text-slate-400 mb-3">Network configuration and node details.</p>
           <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
-  "name": "Midnight Preview",
+  "name": "Midnight Preprod",
   "rpcEndpoint": "wss://...",
   "genesisHash": "0x...",
   "chainType": "Live",
   "node": { "version": "...", "specVersion": 1 },
-  "cardanoNetwork": "preview"
+  "cardanoNetwork": "preprod"
 }</code></pre>
         </div>
 
@@ -1186,7 +1420,7 @@ function getDocsHTML(baseUrl: string) {
           </div>
           <p class="text-sm text-slate-400 mb-3">Comprehensive network overview: blocks, TPS, shielded ratio, committee size, epoch info, and more.</p>
           <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
-  "network": "Midnight Preview", "blocks": 150000, "extrinsics": 500000,
+  "network": "Midnight Preprod", "blocks": 150000, "extrinsics": 500000,
   "midnightTxs": 120000, "bridgeOps": 5000, "avgBlockTime": 6.2,
   "tps": 1.3, "shieldedRatio": 0.85, "contractDeploys": 45,
   "contractCalls": 80000, "committeeSize": 7
@@ -1552,11 +1786,11 @@ function getDocsHTML(baseUrl: string) {
 }
 
 app.get('/api/docs', (req, res) => {
-  res.type('html').send(getDocsHTML('https://preview.nightforge.jp'));
+  res.type('html').send(getDocsHTML('https://preprod.nightforge.jp'));
 });
 
 app.get('/docs', (req, res) => {
-  res.type('html').send(getDocsHTML('https://preview.nightforge.jp'));
+  res.type('html').send(getDocsHTML('https://preprod.nightforge.jp'));
 });
 
 export function startAPI() {

@@ -29,7 +29,7 @@ export const config = {
   // API Server
   api: {
     port: 3004,
-    corsOrigins: ['http://localhost:3000', 'http://localhost:5173'],
+    corsOrigins: ['http://localhost:3000', 'http://localhost:5173', 'https://nightforge.jp', 'https://mainnet.nightforge.jp', 'https://preprod.nightforge.jp', 'https://preview.nightforge.jp'],
   },
 
   // Database
