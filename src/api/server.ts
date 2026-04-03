@@ -978,10 +978,8 @@ app.get('/api/block-producers', async (req, res) => {
   }
 });
 
-app.get('/block-producers', async (req, res) => {
-  // Alias without /api prefix
-  req.url = '/api/block-producers' + (req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '');
-  app.handle(req, res);
+app.get('/block-producers', (req, res) => {
+  res.redirect(307, '/api/block-producers' + (req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''));
 });
 
 // --- Enriched Transaction Data from Official Indexer ---
@@ -1030,9 +1028,8 @@ app.get('/api/tx-enriched/:hash', async (req, res) => {
   }
 });
 
-app.get('/tx-enriched/:hash', async (req, res) => {
-  req.url = '/api/tx-enriched/' + req.params.hash;
-  app.handle(req, res);
+app.get('/tx-enriched/:hash', (req, res) => {
+  res.redirect(307, '/api/tx-enriched/' + req.params.hash);
 });
 
 // --- API Documentation ---
