@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Embeddable Widgets - NightForge Explorer</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Embeddable SVG widget badges for the Midnight Network. Show block height, privacy score, and DUST rate on your site." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+
+    /* Header */
+    .header {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(12px);
+      padding: 1rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: #e2e8f0;
+    }
+    .header-brand img {
+      height: 32px;
+      width: 32px;
+      border-radius: 6px;
+    }
+    .header-brand span {
+      font-weight: 700;
+      font-size: 1.125rem;
+      background: linear-gradient(135deg, #f97316, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-nav {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .header-nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .header-nav a:hover { color: #f97316; }
+    .header-nav a.active { color: #f97316; }
+
+    /* Main content */
+    .main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+
+    /* Page header */
+    .page-title {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .page-title h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #ec4899, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .page-title p {
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    /* Preview All section */
+    .preview-all {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    .preview-all h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #ec4899;
+      margin-bottom: 1.25rem;
+    }
+    .preview-all-badges {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .preview-all-badges img {
+      height: 28px;
+      border-radius: 4px;
+    }
+
+    /* Widget cards grid */
+    .widget-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .widget-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.75rem;
+      animation: fadeIn 0.3s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .widget-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+    .widget-card-header h3 {
+      font-size: 1.125rem;
+      font-weight: 700;
+    }
+    .widget-endpoint {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.75rem;
+      color: #ec4899;
+      background: rgba(236,72,153,0.1);
+      border: 1px solid rgba(236,72,153,0.2);
+      padding: 0.25rem 0.625rem;
+      border-radius: 999px;
+    }
+
+    .widget-preview {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 56px;
+    }
+    .widget-preview img {
+      height: 28px;
+      border-radius: 4px;
+    }
+
+    .widget-desc {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin-bottom: 1.25rem;
+    }
+
+    .code-block-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.375rem;
+    }
+
+    .code-block {
+      position: relative;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.75rem;
+      overflow-x: auto;
+    }
+    .code-block code {
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      color: #e2e8f0;
+      white-space: pre;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 0.625rem;
+      flex-wrap: wrap;
+    }
+    .btn-copy {
+      background: linear-gradient(135deg, #ec4899, #a855f7);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-copy:hover {
+      box-shadow: 0 4px 16px rgba(236,72,153,0.4);
+      transform: translateY(-1px);
+    }
+    .btn-copy.copied {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+    }
+
+    /* Info box */
+    .info-box {
+      background: rgba(236,72,153,0.06);
+      border: 1px solid rgba(236,72,153,0.15);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-top: 0.5rem;
+    }
+    .info-box h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #f472b6;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .info-box p {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin-bottom: 0.75rem;
+    }
+    .info-box p:last-child { margin-bottom: 0; }
+    .info-box ul {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin-left: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .info-box li { margin-bottom: 0.25rem; }
+    .info-box code {
+      background: rgba(255,255,255,0.06);
+      padding: 0.125rem 0.375rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      color: #475569;
+      font-size: 0.8rem;
+    }
+    .footer a { color: #64748b; text-decoration: none; }
+    .footer a:hover { color: #f97316; }
+
+    @media (max-width: 600px) {
+      .page-title h1 { font-size: 1.5rem; }
+      .header-nav { gap: 0.75rem; }
+      .widget-card-header { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+      .preview-all-badges { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="header-brand">
+        <img src="/night-logo.webp" alt="NightForge" />
+        <span>NightForge</span>
+      </a>
+      <nav class="header-nav">
+        <a href="/">Explorer</a>
+        <a href="/tools/">Tools</a>
+        <a href="/tools/widgets.html" class="active">Widgets</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <div class="page-title">
+      <h1>Embeddable Widgets</h1>
+      <p>Add live Midnight Network stats to your site with embeddable SVG badges. Copy the code below and paste it into your HTML or Markdown.</p>
+    </div>
+
+    <!-- Preview All -->
+    <div class="preview-all">
+      <h2>Preview All Badges</h2>
+      <div class="preview-all-badges" id="previewAll"></div>
+    </div>
+
+    <!-- Widget Cards -->
+    <div class="widget-grid" id="widgetGrid"></div>
+
+    <!-- Info box -->
+    <div class="info-box">
+      <h3>
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 5a1 1 0 110 2 1 1 0 010-2zm-1 4h2v6h-2v-6z" fill="currentColor"/></svg>
+        How to Embed
+      </h3>
+      <p>NightForge widgets are free SVG badges that auto-update with live data from the Midnight Network. No API key or authentication required.</p>
+      <ul>
+        <li>Copy the HTML <code>&lt;img&gt;</code> tag to embed in any website</li>
+        <li>Copy the Markdown snippet for GitHub READMEs, docs, or wikis</li>
+        <li>Badges refresh automatically on each page load</li>
+        <li>Lightweight SVG format works everywhere images are supported</li>
+        <li>Responsive — badges scale cleanly at any size</li>
+      </ul>
+      <p>Widgets are served from the NightForge Explorer API. Simply point your <code>&lt;img&gt;</code> tag at the endpoint and the badge renders the latest value.</p>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2026 <a href="/">NightForge Explorer</a> &mdash; Built for the Midnight Network</p>
+  </footer>
+
+  <script>
+    const ORIGIN = window.location.origin;
+
+    const widgets = [
+      {
+        name: 'Block Height',
+        endpoint: '/api/widget/block-height',
+        description: 'Displays the current block height of the Midnight Network. Updates in real time as new blocks are produced.'
+      },
+      {
+        name: 'Privacy Score',
+        endpoint: '/api/widget/privacy-score',
+        description: 'Shows the network privacy shielded ratio — the percentage of transactions using Midnight\'s privacy features.'
+      },
+      {
+        name: 'DUST Rate',
+        endpoint: '/api/widget/dust-rate',
+        description: 'Shows the current DUST generation rate across the network. DUST is the gas token required for all Midnight transactions.'
+      }
+    ];
+
+    // Render preview-all badges
+    const previewAllEl = document.getElementById('previewAll');
+    widgets.forEach(w => {
+      const img = document.createElement('img');
+      img.src = w.endpoint;
+      img.alt = w.name + ' badge';
+      previewAllEl.appendChild(img);
+    });
+
+    // Render widget cards
+    const gridEl = document.getElementById('widgetGrid');
+    widgets.forEach((w, i) => {
+      const fullUrl = ORIGIN + w.endpoint;
+      const htmlCode = `<img src="${fullUrl}" alt="${w.name} - Midnight Network" />`;
+      const mdCode = `![${w.name} - Midnight Network](${fullUrl})`;
+
+      const card = document.createElement('div');
+      card.className = 'widget-card';
+      card.innerHTML = `
+        <div class="widget-card-header">
+          <h3>${w.name}</h3>
+          <span class="widget-endpoint">${w.endpoint}</span>
+        </div>
+        <div class="widget-preview">
+          <img src="${w.endpoint}" alt="${w.name} badge" />
+        </div>
+        <p class="widget-desc">${w.description}</p>
+        <div class="code-block-label">HTML Embed</div>
+        <div class="code-block"><code id="html-code-${i}">${escapeHtml(htmlCode)}</code></div>
+        <div class="code-block-label">Markdown</div>
+        <div class="code-block"><code id="md-code-${i}">${escapeHtml(mdCode)}</code></div>
+        <div class="btn-row">
+          <button class="btn-copy" onclick="copyCode('html', ${i}, this)">Copy HTML</button>
+          <button class="btn-copy" onclick="copyCode('md', ${i}, this)">Copy Markdown</button>
+        </div>
+      `;
+      gridEl.appendChild(card);
+    });
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function copyCode(type, index, btn) {
+      const w = widgets[index];
+      const fullUrl = ORIGIN + w.endpoint;
+      let text;
+      if (type === 'html') {
+        text = `<img src="${fullUrl}" alt="${w.name} - Midnight Network" />`;
+      } else {
+        text = `![${w.name} - Midnight Network](${fullUrl})`;
+      }
+
+      navigator.clipboard.writeText(text).then(() => {
+        const original = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = original;
+          btn.classList.remove('copied');
+        }, 2000);
+      }).catch(() => {
+        // Fallback for older browsers
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        const original = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = original;
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+  </script>
+
+</body>
+</html>

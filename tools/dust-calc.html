@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DUST Calculator - NightForge Explorer</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Calculate DUST generation rates from your NIGHT holdings on the Midnight Network. See daily yield, capacity, and time to max." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+
+    /* Header */
+    .header {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(12px);
+      padding: 1rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: #e2e8f0;
+    }
+    .header-brand img {
+      height: 32px;
+      width: 32px;
+      border-radius: 6px;
+    }
+    .header-brand span {
+      font-weight: 700;
+      font-size: 1.125rem;
+      background: linear-gradient(135deg, #f97316, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-nav {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .header-nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .header-nav a:hover { color: #f97316; }
+    .header-nav a.active { color: #f97316; }
+
+    /* Main content */
+    .main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+
+    /* Page header */
+    .page-title {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .page-title h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #f97316, #06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .page-title p {
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    /* Search box */
+    .search-box {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .search-box label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.625rem;
+    }
+    .input-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+    .search-box input[type="number"] {
+      flex: 1;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.875rem;
+      outline: none;
+      transition: border-color 0.2s;
+      -moz-appearance: textfield;
+    }
+    .search-box input[type="number"]::-webkit-inner-spin-button,
+    .search-box input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .search-box input[type="number"]::placeholder { color: #475569; }
+    .search-box input[type="number"]:focus { border-color: #f97316; }
+    .btn-calc {
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 0.75rem 1.5rem;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-calc:hover {
+      background: linear-gradient(135deg, #fb923c, #f97316);
+      box-shadow: 0 4px 16px rgba(249,115,22,0.4);
+    }
+    .btn-calc:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Slider section */
+    .slider-section {
+      margin-top: 1.25rem;
+    }
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .slider-header span {
+      font-size: 0.75rem;
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .slider-value {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.8rem;
+      color: #fb923c;
+      font-weight: 600;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: linear-gradient(to right, #f97316 0%, #06b6d4 100%);
+      outline: none;
+      opacity: 0.85;
+      transition: opacity 0.2s;
+    }
+    input[type="range"]:hover { opacity: 1; }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #f97316;
+      cursor: pointer;
+      border: 2px solid #0f172a;
+      box-shadow: 0 2px 8px rgba(249,115,22,0.5);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #f97316;
+      cursor: pointer;
+      border: 2px solid #0f172a;
+      box-shadow: 0 2px 8px rgba(249,115,22,0.5);
+    }
+
+    /* Preset buttons */
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .presets span {
+      font-size: 0.75rem;
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      align-self: center;
+      margin-right: 0.25rem;
+    }
+    .preset-btn {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      color: #94a3b8;
+      font-size: 0.8rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .preset-btn:hover {
+      border-color: #f97316;
+      color: #fb923c;
+      background: rgba(249,115,22,0.08);
+    }
+    .preset-btn.active {
+      border-color: #f97316;
+      color: #f97316;
+      background: rgba(249,115,22,0.12);
+    }
+
+    /* Status/error messages */
+    .msg {
+      text-align: center;
+      padding: 1rem;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+    .msg-error {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: #fca5a5;
+    }
+    .msg-loading {
+      background: rgba(6,182,212,0.08);
+      border: 1px solid rgba(6,182,212,0.2);
+      color: #67e8f9;
+    }
+
+    /* Results */
+    .results {
+      display: none;
+    }
+    .results.visible {
+      display: block;
+      animation: fadeIn 0.3s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .result-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 1rem;
+    }
+    .result-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+    .result-card-header h2 {
+      font-size: 1.125rem;
+      font-weight: 700;
+    }
+    .result-card-header .night-amount {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #fb923c;
+      background: rgba(249,115,22,0.1);
+      border: 1px solid rgba(249,115,22,0.25);
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .stat-item {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.375rem;
+    }
+    .stat-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+    .stat-value.highlight { color: #4ade80; }
+    .stat-value.cyan { color: #22d3ee; }
+    .stat-value.orange { color: #fb923c; }
+    .stat-sub {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
+
+    /* Progress bar */
+    .progress-section {
+      margin-top: 1.25rem;
+    }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+    .progress-label span {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .progress-label .progress-days {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      color: #22d3ee;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .progress-bar-track {
+      width: 100%;
+      height: 10px;
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 5px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 5px;
+      background: linear-gradient(90deg, #f97316, #06b6d4);
+      transition: width 0.6s ease-out;
+      min-width: 0;
+    }
+    .progress-markers {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.375rem;
+    }
+    .progress-markers span {
+      font-size: 0.65rem;
+      color: #475569;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    }
+
+    /* Info box */
+    .info-box {
+      background: rgba(6,182,212,0.06);
+      border: 1px solid rgba(6,182,212,0.15);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+    .info-box h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #67e8f9;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .info-box p {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin-bottom: 0.75rem;
+    }
+    .info-box p:last-child { margin-bottom: 0; }
+    .info-box code {
+      background: rgba(255,255,255,0.06);
+      padding: 0.125rem 0.375rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      color: #e2e8f0;
+    }
+    .info-box ul {
+      list-style: none;
+      padding: 0;
+      margin: 0.5rem 0;
+    }
+    .info-box ul li {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+    .info-box ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.65em;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #06b6d4;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      color: #475569;
+      font-size: 0.8rem;
+    }
+    .footer a { color: #64748b; text-decoration: none; }
+    .footer a:hover { color: #f97316; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(103,232,249,0.3);
+      border-top-color: #67e8f9;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 600px) {
+      .input-row { flex-direction: column; }
+      .btn-calc { width: 100%; }
+      .stat-grid { grid-template-columns: 1fr; }
+      .page-title h1 { font-size: 1.5rem; }
+      .header-nav { gap: 0.75rem; }
+      .presets { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="header-brand">
+        <img src="/night-logo.webp" alt="NightForge" />
+        <span>NightForge</span>
+      </a>
+      <nav class="header-nav">
+        <a href="/">Explorer</a>
+        <a href="/tools/">Tools</a>
+        <a href="/tools/dust-calc.html" class="active">DUST Calc</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <div class="page-title">
+      <h1>DUST Calculator</h1>
+      <p>Enter a NIGHT amount to calculate DUST generation rates, maximum capacity, and time to reach full reserves.</p>
+    </div>
+
+    <!-- Input -->
+    <div class="search-box">
+      <label for="nightInput">NIGHT Amount</label>
+      <div class="input-row">
+        <input type="number" id="nightInput" placeholder="1000" min="0" max="999999999" step="any" />
+        <button class="btn-calc" id="calcBtn" onclick="calculate()">Calculate</button>
+      </div>
+
+      <!-- Slider -->
+      <div class="slider-section">
+        <div class="slider-header">
+          <span>Quick Adjust</span>
+          <span class="slider-value" id="sliderLabel">0 NIGHT</span>
+        </div>
+        <input type="range" id="nightSlider" min="0" max="10000" value="0" step="1" />
+      </div>
+
+      <!-- Preset buttons -->
+      <div class="presets">
+        <span>Presets:</span>
+        <button class="preset-btn" onclick="setPreset(100)">100</button>
+        <button class="preset-btn" onclick="setPreset(500)">500</button>
+        <button class="preset-btn" onclick="setPreset(1000)">1,000</button>
+        <button class="preset-btn" onclick="setPreset(5000)">5,000</button>
+        <button class="preset-btn" onclick="setPreset(10000)">10,000</button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div class="msg msg-error" id="errorMsg"></div>
+    <div class="msg msg-loading" id="loadingMsg"><span class="spinner"></span>Calculating DUST generation...</div>
+
+    <!-- Results -->
+    <div class="results" id="results">
+      <div class="result-card">
+        <div class="result-card-header">
+          <h2>Generation Rates</h2>
+          <span class="night-amount" id="nightLabel">-- NIGHT</span>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="stat-label">DUST per Day</div>
+            <div class="stat-value orange" id="dustPerDay">--</div>
+            <div class="stat-sub">daily generation</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">DUST per Week</div>
+            <div class="stat-value cyan" id="dustPerWeek">--</div>
+            <div class="stat-sub">weekly generation</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Max Capacity</div>
+            <div class="stat-value highlight" id="maxCapacity">--</div>
+            <div class="stat-sub" id="capacitySub">5 DUST per NIGHT</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Specks per Second</div>
+            <div class="stat-value" id="specksPerSec">--</div>
+            <div class="stat-sub">smallest DUST unit</div>
+          </div>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="progress-section">
+          <div class="progress-label">
+            <span>Time to Max Capacity</span>
+            <span class="progress-days" id="daysToMax">-- days</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressFill" style="width: 0%;"></div>
+          </div>
+          <div class="progress-markers">
+            <span>0d</span>
+            <span id="midMarker">3.5d</span>
+            <span id="endMarker">7d</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info section -->
+    <div class="info-box">
+      <h3>
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 5a1 1 0 110 2 1 1 0 010-2zm-1 4h2v6h-2v-6z" fill="currentColor"/></svg>
+        How DUST Generation Works
+      </h3>
+      <p>DUST is the gas token on the Midnight Network, required for all transaction fees. It is generated passively by holders of NIGHT tokens on the Cardano blockchain.</p>
+      <ul>
+        <li>Each NIGHT token generates DUST at a fixed rate of <code>8,267 specks/star/sec</code></li>
+        <li>Maximum DUST capacity is <code>5 DUST per NIGHT held</code></li>
+        <li>Full capacity is reached in approximately <code>~7 days</code></li>
+        <li>DUST is <strong style="color:#e2e8f0;">non-transferable</strong> and decays when backing NIGHT is spent</li>
+        <li>You must register your reward address at the <a href="https://dust.nethermind.dev" target="_blank" rel="noopener noreferrer" style="color:#22d3ee;text-decoration:none;font-weight:600;">Nethermind DUST Generator</a></li>
+      </ul>
+      <p>Use this calculator to estimate how much DUST you would generate for any NIGHT amount. The actual rate is determined on-chain and may vary slightly.</p>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2026 <a href="/">NightForge Explorer</a> &mdash; Built for the Midnight Network</p>
+  </footer>
+
+  <script>
+    const nightInput = document.getElementById('nightInput');
+    const nightSlider = document.getElementById('nightSlider');
+    const sliderLabel = document.getElementById('sliderLabel');
+    const calcBtn = document.getElementById('calcBtn');
+    const errorMsg = document.getElementById('errorMsg');
+    const loadingMsg = document.getElementById('loadingMsg');
+    const resultsEl = document.getElementById('results');
+
+    // Sync slider with input
+    nightSlider.addEventListener('input', () => {
+      const val = parseInt(nightSlider.value);
+      nightInput.value = val;
+      sliderLabel.textContent = val.toLocaleString() + ' NIGHT';
+      updatePresetHighlight(val);
+      calculate();
+    });
+
+    nightInput.addEventListener('input', () => {
+      const val = parseFloat(nightInput.value) || 0;
+      if (val >= 0 && val <= 10000) {
+        nightSlider.value = val;
+      }
+      sliderLabel.textContent = Math.round(val).toLocaleString() + ' NIGHT';
+      updatePresetHighlight(val);
+    });
+
+    // Enter key triggers calculate
+    nightInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') calculate();
+    });
+
+    function setPreset(value) {
+      nightInput.value = value;
+      nightSlider.value = Math.min(value, 10000);
+      sliderLabel.textContent = value.toLocaleString() + ' NIGHT';
+      updatePresetHighlight(value);
+      calculate();
+    }
+
+    function updatePresetHighlight(val) {
+      const presets = [100, 500, 1000, 5000, 10000];
+      document.querySelectorAll('.preset-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', presets[i] === val);
+      });
+    }
+
+    // Pre-fill from URL params
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const night = params.get('night');
+      if (night) {
+        const val = parseFloat(night);
+        if (!isNaN(val) && val > 0) {
+          nightInput.value = val;
+          nightSlider.value = Math.min(val, 10000);
+          sliderLabel.textContent = Math.round(val).toLocaleString() + ' NIGHT';
+          updatePresetHighlight(val);
+          calculate();
+        }
+      }
+    })();
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      loadingMsg.style.display = 'none';
+      resultsEl.classList.remove('visible');
+    }
+
+    function hideMessages() {
+      errorMsg.style.display = 'none';
+      loadingMsg.style.display = 'none';
+    }
+
+    function formatNumber(n, decimals = 2) {
+      if (n === null || n === undefined) return '--';
+      const num = parseFloat(n);
+      if (isNaN(num)) return '--';
+      if (num >= 1e12) return (num / 1e12).toFixed(decimals) + 'T';
+      if (num >= 1e9) return (num / 1e9).toFixed(decimals) + 'B';
+      if (num >= 1e6) return (num / 1e6).toFixed(decimals) + 'M';
+      if (num >= 1e3) return num.toLocaleString(undefined, { maximumFractionDigits: decimals });
+      return num.toFixed(decimals);
+    }
+
+    async function calculate() {
+      const nightVal = parseFloat(nightInput.value);
+
+      if (!nightInput.value || isNaN(nightVal)) {
+        showError('Please enter a NIGHT amount.');
+        return;
+      }
+      if (nightVal < 0) {
+        showError('NIGHT amount must be a positive number.');
+        return;
+      }
+      if (nightVal === 0) {
+        showError('Enter a NIGHT amount greater than zero.');
+        return;
+      }
+
+      hideMessages();
+      loadingMsg.style.display = 'block';
+      resultsEl.classList.remove('visible');
+      calcBtn.disabled = true;
+
+      try {
+        const resp = await fetch('/api/dust-calculator?night=' + encodeURIComponent(nightVal));
+        if (!resp.ok) {
+          const body = await resp.text();
+          throw new Error(body || 'Server returned ' + resp.status);
+        }
+        const data = await resp.json();
+        renderResults(data);
+      } catch (err) {
+        showError('Failed to calculate: ' + err.message);
+      } finally {
+        calcBtn.disabled = false;
+      }
+    }
+
+    function renderResults(data) {
+      hideMessages();
+
+      // Header label
+      document.getElementById('nightLabel').textContent = formatNumber(data.nightHeld) + ' NIGHT';
+
+      // Stats
+      document.getElementById('dustPerDay').textContent = formatNumber(data.dustPerDay, 6);
+      document.getElementById('dustPerWeek').textContent = formatNumber(data.dustPerWeek, 6);
+      document.getElementById('maxCapacity').textContent = formatNumber(data.maxCapacity);
+      document.getElementById('capacitySub').textContent = '5 DUST per NIGHT held';
+
+      // Specks per second
+      const specks = data.specksPerSecond;
+      document.getElementById('specksPerSec').textContent = formatNumber(specks);
+
+      // Days to max
+      const days = parseFloat(data.daysToMaxCapacity) || 0;
+      document.getElementById('daysToMax').textContent = days.toFixed(1) + ' days';
+
+      // Progress bar — animate fill based on day 1 out of total days
+      // Show as "what portion of a 7-day window" for visual context
+      const maxDays = Math.max(days, 7);
+      const progressPct = days > 0 ? Math.min((1 / days) * 100, 100) : 0;
+      // Actually, show the inverse: how full would you be at day 1
+      // Better: show progress as how close you are to reaching max capacity (days/maxDays)
+      // For the visual, animate to a reference: fill = percentage of max capacity reached after 1 day
+      const oneDayPct = days > 0 ? Math.min((1 / days) * 100, 100) : 0;
+
+      // Use a simulated timeline: fill represents days relative to a 7-day reference
+      const fillPct = days > 0 ? Math.min((7 / days) * 100, 100) : 100;
+      document.getElementById('progressFill').style.width = fillPct + '%';
+
+      // Markers
+      const half = (days / 2).toFixed(1);
+      document.getElementById('midMarker').textContent = half + 'd';
+      document.getElementById('endMarker').textContent = days.toFixed(1) + 'd';
+
+      resultsEl.classList.add('visible');
+    }
+  </script>
+
+</body>
+</html>
