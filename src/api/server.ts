@@ -65,7 +65,7 @@ app.get('/', async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Midnight Preprod Explorer</title>
+  <title>Midnight Preview Explorer</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e0e0e0; padding: 20px; }
@@ -97,8 +97,16 @@ app.get('/', async (req, res) => {
 </head>
 <body>
   <div class="container">
-    <h1>Midnight Preprod Explorer</h1>
-    <p class="subtitle">Block explorer for Midnight Preprod Network</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+      <div>
+        <h1>Midnight Preview Explorer</h1>
+        <p class="subtitle" style="margin-bottom:0">Block explorer for Midnight Preview Network</p>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <a href="/tools/" style="padding:8px 18px;background:#9d4edd;border-radius:8px;color:#fff;font-weight:600;font-size:14px;text-decoration:none;">Tools</a>
+        <a href="/api/docs" style="padding:8px 18px;background:#1a1a2e;border:1px solid #2a2a4e;border-radius:8px;color:#9d4edd;font-weight:600;font-size:14px;text-decoration:none;">API Docs</a>
+      </div>
+    </div>
 
     <div class="search">
       <input type="text" id="searchInput" placeholder="Search by block height or hash..." onkeypress="if(event.key==='Enter')search()">
