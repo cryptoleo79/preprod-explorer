@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DUST Economics Observatory - NightForge Explorer</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="DUST Economics Observatory — real-time generation, consumption, and sustainability metrics for the Midnight Network." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+
+    /* Header */
+    .header {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(12px);
+      padding: 1rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: #e2e8f0;
+    }
+    .header-brand img {
+      height: 32px;
+      width: 32px;
+      border-radius: 6px;
+    }
+    .header-brand span {
+      font-weight: 700;
+      font-size: 1.125rem;
+      background: linear-gradient(135deg, #f97316, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-nav {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .header-nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .header-nav a:hover { color: #f97316; }
+    .header-nav a.active { color: #f97316; }
+
+    /* Main content */
+    .main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+
+    /* Page header */
+    .page-title {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .page-title h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .page-title p {
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    /* Refresh row */
+    .refresh-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .btn-refresh {
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 0.625rem 1.5rem;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn-refresh:hover {
+      background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+      box-shadow: 0 4px 16px rgba(139,92,246,0.4);
+    }
+    .btn-refresh:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .last-updated {
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+
+    /* Messages */
+    .msg {
+      text-align: center;
+      padding: 1rem;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+    .msg-error {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: #fca5a5;
+    }
+    .msg-loading {
+      background: rgba(139,92,246,0.08);
+      border: 1px solid rgba(139,92,246,0.2);
+      color: #c4b5fd;
+    }
+
+    /* Section heading */
+    .section-heading {
+      font-size: 1rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .section-heading .icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+    }
+    .section-heading.gen { color: #4ade80; }
+    .section-heading.con { color: #f97316; }
+    .section-heading.flow { color: #8b5cf6; }
+
+    /* Cards */
+    .result-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+    }
+    .stat-item {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.375rem;
+    }
+    .stat-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+    .stat-value.green { color: #4ade80; }
+    .stat-value.cyan { color: #22d3ee; }
+    .stat-value.orange { color: #fb923c; }
+    .stat-value.purple { color: #a78bfa; }
+    .stat-sub {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.875rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-surplus {
+      background: rgba(34,197,94,0.15);
+      color: #4ade80;
+      border: 1px solid rgba(34,197,94,0.3);
+    }
+    .badge-deficit {
+      background: rgba(239,68,68,0.12);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .badge-surplus .badge-dot { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+    .badge-deficit .badge-dot { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+
+    /* Sustainability gauge */
+    .gauge-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .gauge-ring {
+      position: relative;
+      width: 100px;
+      height: 100px;
+    }
+    .gauge-ring svg {
+      transform: rotate(-90deg);
+      width: 100px;
+      height: 100px;
+    }
+    .gauge-ring .bg {
+      fill: none;
+      stroke: rgba(255,255,255,0.06);
+      stroke-width: 8;
+    }
+    .gauge-ring .fg {
+      fill: none;
+      stroke-width: 8;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.8s ease, stroke 0.4s;
+    }
+    .gauge-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 1.25rem;
+      font-weight: 800;
+    }
+    .gauge-label {
+      font-size: 0.75rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    /* Net flow card layout */
+    .flow-row {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .flow-stats {
+      flex: 1;
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .flow-gauge {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Collapsible parameters */
+    .params-toggle {
+      width: 100%;
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.25rem 1.75rem;
+      color: #94a3b8;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s;
+      margin-bottom: 0;
+    }
+    .params-toggle:hover {
+      border-color: rgba(139,92,246,0.3);
+      color: #c4b5fd;
+    }
+    .params-toggle .chevron {
+      transition: transform 0.3s;
+      font-size: 0.75rem;
+    }
+    .params-toggle.open .chevron {
+      transform: rotate(180deg);
+    }
+    .params-toggle.open {
+      border-radius: 16px 16px 0 0;
+      margin-bottom: 0;
+      border-bottom: none;
+    }
+    .params-body {
+      display: none;
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-top: none;
+      border-radius: 0 0 16px 16px;
+      padding: 0 1.75rem 1.75rem;
+    }
+    .params-body.open {
+      display: block;
+      animation: fadeIn 0.3s ease-out;
+    }
+    .param-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+    }
+    .param-item {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 10px;
+      padding: 0.875rem;
+    }
+    .param-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.25rem;
+    }
+    .param-value {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #c4b5fd;
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* Info box */
+    .info-box {
+      background: rgba(139,92,246,0.06);
+      border: 1px solid rgba(139,92,246,0.15);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+    .info-box h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #c4b5fd;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .info-box p {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin-bottom: 0.75rem;
+    }
+    .info-box p:last-child { margin-bottom: 0; }
+    .info-box strong { color: #e2e8f0; }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      color: #475569;
+      font-size: 0.8rem;
+    }
+    .footer a { color: #64748b; text-decoration: none; }
+    .footer a:hover { color: #f97316; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(139,92,246,0.3);
+      border-top-color: #a78bfa;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .results { display: none; }
+    .results.visible { display: block; animation: fadeIn 0.3s ease-out; }
+
+    @media (max-width: 600px) {
+      .stat-grid { grid-template-columns: 1fr; }
+      .page-title h1 { font-size: 1.5rem; }
+      .header-nav { gap: 0.75rem; }
+      .flow-row { flex-direction: column; }
+      .param-grid { grid-template-columns: 1fr; }
+      .gauge-ring { width: 80px; height: 80px; }
+      .gauge-ring svg { width: 80px; height: 80px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="header-brand">
+        <img src="/night-logo.webp" alt="NightForge" />
+        <span>NightForge</span>
+      </a>
+      <nav class="header-nav">
+        <a href="/">Explorer</a>
+        <a href="/tools/">Tools</a>
+        <a href="/tools/dust-economics.html" class="active">DUST Economics</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <div class="page-title">
+      <h1>DUST Economics Observatory</h1>
+      <p>Real-time generation, consumption, and sustainability metrics for the Midnight Network's DUST token economy.</p>
+    </div>
+
+    <!-- Refresh -->
+    <div class="refresh-row">
+      <button class="btn-refresh" id="refreshBtn" onclick="fetchData()">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M4 4v5h5M20 20v-5h-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 9A9 9 0 005.64 5.64L4 9m16 6l-1.64 3.36A9 9 0 014.51 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Refresh
+      </button>
+      <span class="last-updated" id="lastUpdated"></span>
+    </div>
+
+    <!-- Messages -->
+    <div class="msg msg-error" id="errorMsg"></div>
+    <div class="msg msg-loading" id="loadingMsg"><span class="spinner"></span>Fetching DUST economics data...</div>
+
+    <!-- Results -->
+    <div class="results" id="results">
+
+      <!-- Generation -->
+      <div class="section-heading gen">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor"/></svg>
+        Generation
+      </div>
+      <div class="result-card">
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="stat-label">Estimated Staked NIGHT</div>
+            <div class="stat-value green" id="stakedNight">--</div>
+            <div class="stat-sub" id="stakedNightSub"></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">DUST Per Day</div>
+            <div class="stat-value green" id="dustPerDay">--</div>
+            <div class="stat-sub">network-wide generation</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">DUST Per Week</div>
+            <div class="stat-value cyan" id="dustPerWeek">--</div>
+            <div class="stat-sub">7-day projected</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Max Network Capacity</div>
+            <div class="stat-value orange" id="maxCapacity">--</div>
+            <div class="stat-sub" id="maxCapacitySub"></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Days to Max Capacity</div>
+            <div class="stat-value purple" id="daysToMax">--</div>
+            <div class="stat-sub">at current generation rate</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Consumption -->
+      <div class="section-heading con">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H7l5-8v4h4l-5 8z" fill="currentColor"/></svg>
+        Consumption
+      </div>
+      <div class="result-card">
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="stat-label">Avg Daily Transactions</div>
+            <div class="stat-value orange" id="avgDailyTx">--</div>
+            <div class="stat-sub">network-wide</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">DUST Burn Per Day</div>
+            <div class="stat-value orange" id="dustBurn">--</div>
+            <div class="stat-sub">estimated consumption</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Avg Fee Per Transaction</div>
+            <div class="stat-value cyan" id="avgFee">--</div>
+            <div class="stat-sub">in specks</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Net Flow -->
+      <div class="section-heading flow">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" fill="currentColor"/></svg>
+        Net Flow
+      </div>
+      <div class="result-card">
+        <div class="flow-row">
+          <div class="flow-stats">
+            <div class="stat-item">
+              <div class="stat-label">Daily Net DUST</div>
+              <div class="stat-value green" id="dailyNet">--</div>
+              <div class="stat-sub">generation minus burn</div>
+            </div>
+            <div class="stat-item">
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                  <div class="stat-label">Status</div>
+                  <div id="flowBadge" style="margin-top:0.375rem;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="flow-gauge">
+            <div class="gauge-container">
+              <div class="gauge-ring">
+                <svg viewBox="0 0 100 100">
+                  <circle class="bg" cx="50" cy="50" r="42" />
+                  <circle class="fg" id="gaugeCircle" cx="50" cy="50" r="42"
+                    stroke-dasharray="263.89"
+                    stroke-dashoffset="263.89" />
+                </svg>
+                <div class="gauge-text" id="gaugeText">--</div>
+              </div>
+              <div class="gauge-label">Sustainability</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Technical Parameters -->
+      <button class="params-toggle" id="paramsToggle" onclick="toggleParams()">
+        <span>Technical Parameters</span>
+        <span class="chevron">&#9660;</span>
+      </button>
+      <div class="params-body" id="paramsBody">
+        <div class="param-grid" id="paramGrid">
+          <!-- filled by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Info box -->
+    <div class="info-box">
+      <h3>
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 5a1 1 0 110 2 1 1 0 010-2zm-1 4h2v6h-2v-6z" fill="currentColor"/></svg>
+        Understanding DUST Economics
+      </h3>
+      <p><strong>Generation:</strong> DUST is produced passively by staking NIGHT tokens on Cardano. The generation rate depends on total staked NIGHT and the protocol's specks-per-star-per-second parameter. Each address has a capacity cap (5x their NIGHT balance in DUST), after which generation halts until DUST is spent or transferred.</p>
+      <p><strong>Consumption:</strong> Every transaction on the Midnight Network requires a DUST fee, which is permanently burned. The burn rate depends on network activity and average fee size (measured in specks, the smallest DUST unit: 1 DUST = 10^15 specks).</p>
+      <p><strong>Sustainability:</strong> The sustainability score measures the balance between generation and consumption. A score of 100 means generation far exceeds burn (surplus), while a low score signals that network usage may outpace supply. A healthy economy maintains a score above 80.</p>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2026 <a href="/">NightForge Explorer</a> &mdash; Built for the Midnight Network</p>
+  </footer>
+
+  <script>
+    const refreshBtn = document.getElementById('refreshBtn');
+    const errorMsg = document.getElementById('errorMsg');
+    const loadingMsg = document.getElementById('loadingMsg');
+    const resultsEl = document.getElementById('results');
+    const lastUpdated = document.getElementById('lastUpdated');
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      loadingMsg.style.display = 'none';
+    }
+
+    function hideMessages() {
+      errorMsg.style.display = 'none';
+      loadingMsg.style.display = 'none';
+    }
+
+    function formatNumber(n, decimals) {
+      if (n === null || n === undefined) return '--';
+      const num = parseFloat(n);
+      if (isNaN(num)) return '--';
+      if (decimals === undefined) {
+        if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+        if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+        if (num >= 1e3) return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        return num % 1 === 0 ? num.toString() : num.toFixed(2);
+      }
+      if (num >= 1e9) return (num / 1e9).toFixed(decimals) + 'B';
+      if (num >= 1e6) return (num / 1e6).toFixed(decimals) + 'M';
+      if (num >= 1e3) return num.toLocaleString(undefined, { maximumFractionDigits: decimals });
+      return num.toFixed(decimals);
+    }
+
+    function scoreColor(score) {
+      if (score >= 80) return '#22c55e';
+      if (score >= 50) return '#eab308';
+      return '#ef4444';
+    }
+
+    function scoreTextClass(score) {
+      if (score >= 80) return 'color:#4ade80';
+      if (score >= 50) return 'color:#facc15';
+      return 'color:#fca5a5';
+    }
+
+    function setGauge(score) {
+      const circle = document.getElementById('gaugeCircle');
+      const text = document.getElementById('gaugeText');
+      const circumference = 2 * Math.PI * 42; // ~263.89
+      const clamped = Math.max(0, Math.min(100, score));
+      const offset = circumference - (clamped / 100) * circumference;
+      circle.style.strokeDashoffset = offset;
+      circle.style.stroke = scoreColor(clamped);
+      text.textContent = Math.round(clamped);
+      text.style.cssText = scoreTextClass(clamped);
+    }
+
+    function renderParams(params) {
+      const grid = document.getElementById('paramGrid');
+      const labels = {
+        specksPerStarPerSecond: 'Specks / Star / Second',
+        starsPerNight: 'Stars Per NIGHT',
+        specksPerDust: 'Specks Per DUST',
+        capRatio: 'Capacity Ratio',
+        timeToCapSeconds: 'Time to Cap (seconds)',
+        gracePeriodHours: 'Grace Period (hours)'
+      };
+      grid.innerHTML = '';
+      for (const [key, val] of Object.entries(params)) {
+        const label = labels[key] || key;
+        const div = document.createElement('div');
+        div.className = 'param-item';
+        div.innerHTML = '<div class="param-label">' + label + '</div><div class="param-value">' + val + '</div>';
+        grid.appendChild(div);
+      }
+    }
+
+    function toggleParams() {
+      const toggle = document.getElementById('paramsToggle');
+      const body = document.getElementById('paramsBody');
+      toggle.classList.toggle('open');
+      body.classList.toggle('open');
+    }
+
+    async function fetchData() {
+      hideMessages();
+      loadingMsg.style.display = 'block';
+      resultsEl.classList.remove('visible');
+      refreshBtn.disabled = true;
+
+      try {
+        const resp = await fetch('/api/dust-economics');
+        if (!resp.ok) {
+          const body = await resp.text();
+          throw new Error(body || 'Server returned ' + resp.status);
+        }
+        const data = await resp.json();
+        renderData(data);
+      } catch (err) {
+        showError('Failed to fetch economics data: ' + err.message);
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    function renderData(data) {
+      hideMessages();
+
+      // Generation
+      const gen = data.generation || {};
+      document.getElementById('stakedNight').textContent = formatNumber(gen.estimatedStakedNight);
+      const raw = parseFloat(gen.estimatedStakedNight || 0);
+      document.getElementById('stakedNightSub').textContent = raw ? raw.toLocaleString() + ' NIGHT' : '';
+      document.getElementById('dustPerDay').textContent = formatNumber(gen.dustPerDay);
+      document.getElementById('dustPerWeek').textContent = formatNumber(gen.dustPerWeek);
+      document.getElementById('maxCapacity').textContent = formatNumber(gen.maxNetworkCapacity);
+      document.getElementById('maxCapacitySub').textContent = gen.maxNetworkCapacity ? formatNumber(gen.maxNetworkCapacity) + ' DUST total' : '';
+      document.getElementById('daysToMax').textContent = gen.daysToMaxCapacity != null ? parseFloat(gen.daysToMaxCapacity).toFixed(1) : '--';
+
+      // Consumption
+      const con = data.consumption || {};
+      document.getElementById('avgDailyTx').textContent = formatNumber(con.avgDailyTransactions);
+      document.getElementById('dustBurn').textContent = formatNumber(con.estimatedDustBurnPerDay);
+      document.getElementById('avgFee').textContent = con.avgFeePerTransaction || '--';
+
+      // Net flow
+      const flow = data.netFlow || {};
+      document.getElementById('dailyNet').textContent = formatNumber(flow.dailyNetDust);
+
+      const badge = document.getElementById('flowBadge');
+      const status = (flow.status || '').toLowerCase();
+      if (status === 'surplus') {
+        badge.innerHTML = '<span class="status-badge badge-surplus"><span class="badge-dot"></span>Surplus</span>';
+      } else {
+        badge.innerHTML = '<span class="status-badge badge-deficit"><span class="badge-dot"></span>Deficit</span>';
+      }
+
+      // Sustainability gauge
+      const score = parseFloat(flow.sustainabilityScore);
+      if (!isNaN(score)) {
+        setGauge(score);
+      }
+
+      // Parameters
+      if (data.parameters) {
+        renderParams(data.parameters);
+      }
+
+      // Timestamp
+      lastUpdated.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+
+      resultsEl.classList.add('visible');
+    }
+
+    // Auto-fetch on page load
+    fetchData();
+  </script>
+
+</body>
+</html>

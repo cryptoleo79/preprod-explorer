@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Health Score - NightForge Explorer</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Real-time Privacy Health Score for the Midnight Network. Track shielded transaction ratios, network activity, decentralization, and ecosystem diversity." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+
+    /* Header */
+    .header {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(12px);
+      padding: 1rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: #e2e8f0;
+    }
+    .header-brand img {
+      height: 32px;
+      width: 32px;
+      border-radius: 6px;
+    }
+    .header-brand span {
+      font-weight: 700;
+      font-size: 1.125rem;
+      background: linear-gradient(135deg, #f97316, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-nav {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .header-nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .header-nav a:hover { color: #f97316; }
+    .header-nav a.active { color: #06b6d4; }
+
+    /* Main content */
+    .main {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+
+    /* Page header */
+    .page-title {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .page-title h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #06b6d4, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .page-title p {
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    /* Messages */
+    .msg {
+      text-align: center;
+      padding: 1rem;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+    .msg-error {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: #fca5a5;
+    }
+    .msg-loading {
+      background: rgba(6,182,212,0.08);
+      border: 1px solid rgba(6,182,212,0.2);
+      color: #67e8f9;
+    }
+
+    /* Score ring container */
+    .score-section {
+      display: none;
+    }
+    .score-section.visible {
+      display: block;
+      animation: fadeIn 0.3s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .gauge-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 2rem 1.75rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    .gauge-wrapper {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      margin: 0 auto 1.25rem;
+    }
+    .gauge-wrapper svg {
+      width: 200px;
+      height: 200px;
+      transform: rotate(-90deg);
+    }
+    .gauge-bg {
+      fill: none;
+      stroke: rgba(255,255,255,0.06);
+      stroke-width: 14;
+    }
+    .gauge-fill {
+      fill: none;
+      stroke-width: 14;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s ease-out, stroke 0.5s;
+    }
+    .gauge-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+    .gauge-score {
+      font-size: 2.5rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .gauge-grade {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-top: 0.25rem;
+      opacity: 0.8;
+    }
+    .gauge-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
+
+    .interpretation {
+      font-size: 1rem;
+      color: #cbd5e1;
+      line-height: 1.6;
+      margin-bottom: 0.75rem;
+    }
+    .timestamp {
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    .btn-refresh {
+      background: linear-gradient(135deg, #06b6d4, #0891b2);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 0.625rem 1.5rem;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 1rem;
+    }
+    .btn-refresh:hover {
+      background: linear-gradient(135deg, #22d3ee, #06b6d4);
+      box-shadow: 0 4px 16px rgba(6,182,212,0.4);
+    }
+    .btn-refresh:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Breakdown cards */
+    .breakdown-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .breakdown-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 1.25rem;
+    }
+    .breakdown-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+    .breakdown-name {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+    .breakdown-weight {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      background: rgba(255,255,255,0.05);
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+    }
+    .breakdown-bar-track {
+      width: 100%;
+      height: 8px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.625rem;
+    }
+    .breakdown-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.8s ease-out;
+    }
+    .breakdown-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .breakdown-score {
+      font-size: 0.95rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    }
+    .breakdown-value {
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+
+    /* Info box */
+    .info-box {
+      background: rgba(6,182,212,0.06);
+      border: 1px solid rgba(6,182,212,0.15);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+    .info-box h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #67e8f9;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .info-box p {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin-bottom: 0.75rem;
+    }
+    .info-box p:last-child { margin-bottom: 0; }
+    .info-box ul {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin: 0 0 0.75rem 1.25rem;
+    }
+    .info-box li { margin-bottom: 0.25rem; }
+    .info-box strong { color: #cbd5e1; }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      color: #475569;
+      font-size: 0.8rem;
+    }
+    .footer a { color: #64748b; text-decoration: none; }
+    .footer a:hover { color: #f97316; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(103,232,249,0.3);
+      border-top-color: #67e8f9;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Color classes */
+    .color-green { color: #4ade80; }
+    .color-amber { color: #fbbf24; }
+    .color-red { color: #f87171; }
+    .bg-green { background: #4ade80; }
+    .bg-amber { background: #fbbf24; }
+    .bg-red { background: #f87171; }
+
+    @media (max-width: 600px) {
+      .breakdown-grid { grid-template-columns: 1fr; }
+      .page-title h1 { font-size: 1.5rem; }
+      .header-nav { gap: 0.75rem; }
+      .gauge-wrapper { width: 160px; height: 160px; }
+      .gauge-wrapper svg { width: 160px; height: 160px; }
+      .gauge-score { font-size: 2rem; }
+      .gauge-grade { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="header-brand">
+        <img src="/night-logo.webp" alt="NightForge" />
+        <span>NightForge</span>
+      </a>
+      <nav class="header-nav">
+        <a href="/">Explorer</a>
+        <a href="/tools/">Tools</a>
+        <a href="/tools/privacy-score.html" class="active">Privacy Score</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <div class="page-title">
+      <h1>Privacy Health Score</h1>
+      <p>A composite measure of how well the Midnight Network is delivering on its privacy promise, updated in real time.</p>
+    </div>
+
+    <!-- Messages -->
+    <div class="msg msg-error" id="errorMsg"></div>
+    <div class="msg msg-loading" id="loadingMsg"><span class="spinner"></span>Calculating privacy health score...</div>
+
+    <!-- Score section -->
+    <div class="score-section" id="scoreSection">
+
+      <!-- Gauge card -->
+      <div class="gauge-card">
+        <div class="gauge-wrapper">
+          <svg viewBox="0 0 200 200">
+            <circle class="gauge-bg" cx="100" cy="100" r="85"></circle>
+            <circle class="gauge-fill" id="gaugeFill" cx="100" cy="100" r="85"
+              stroke-dasharray="534.07"
+              stroke-dashoffset="534.07"></circle>
+          </svg>
+          <div class="gauge-center">
+            <div class="gauge-score" id="gaugeScore">--</div>
+            <div class="gauge-grade" id="gaugeGrade">--</div>
+            <div class="gauge-label">Privacy Health</div>
+          </div>
+        </div>
+        <p class="interpretation" id="interpretation"></p>
+        <p class="timestamp" id="timestamp"></p>
+        <button class="btn-refresh" id="refreshBtn" onclick="fetchScore()">Refresh</button>
+      </div>
+
+      <!-- Breakdown grid -->
+      <div class="breakdown-grid" id="breakdownGrid"></div>
+
+    </div>
+
+    <!-- Info section -->
+    <div class="info-box">
+      <h3>
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 5a1 1 0 110 2 1 1 0 010-2zm-1 4h2v6h-2v-6z" fill="currentColor"/></svg>
+        What does the Privacy Health Score measure?
+      </h3>
+      <p>The Privacy Health Score is a weighted composite metric (0-100) that captures how effectively the Midnight Network is operating as a privacy-first blockchain. It is calculated from four components:</p>
+      <ul>
+        <li><strong>Shielded Ratio (40%)</strong> &mdash; The percentage of transactions using shielded (private) transfers. Higher is better for network-wide privacy.</li>
+        <li><strong>Network Activity (25%)</strong> &mdash; Transaction throughput (TPS). More activity means a larger anonymity set, making individual transactions harder to trace.</li>
+        <li><strong>Decentralization (20%)</strong> &mdash; The number and distribution of validators. More validators means greater censorship resistance and trust minimization.</li>
+        <li><strong>Ecosystem Diversity (15%)</strong> &mdash; The number of deployed smart contracts. A diverse ecosystem means privacy tooling is being actively built and used.</li>
+      </ul>
+      <p>A score of 80+ (grade A) indicates excellent privacy health. Between 60-79 (grade B) is good with room to improve. Below 60 signals areas that need community attention. The score updates in real time as chain data changes.</p>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2026 <a href="/">NightForge Explorer</a> &mdash; Built for the Midnight Network</p>
+  </footer>
+
+  <script>
+    const errorMsg = document.getElementById('errorMsg');
+    const loadingMsg = document.getElementById('loadingMsg');
+    const scoreSection = document.getElementById('scoreSection');
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    const CIRCUMFERENCE = 2 * Math.PI * 85; // ~534.07
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      loadingMsg.style.display = 'none';
+    }
+
+    function hideMessages() {
+      errorMsg.style.display = 'none';
+      loadingMsg.style.display = 'none';
+    }
+
+    function scoreColor(score) {
+      if (score >= 80) return 'green';
+      if (score >= 60) return 'amber';
+      return 'red';
+    }
+
+    function strokeColor(score) {
+      if (score >= 80) return '#4ade80';
+      if (score >= 60) return '#fbbf24';
+      return '#f87171';
+    }
+
+    function componentLabel(key) {
+      const labels = {
+        shieldedRatio: 'Shielded Ratio',
+        networkActivity: 'Network Activity',
+        decentralization: 'Decentralization',
+        ecosystemDiversity: 'Ecosystem Diversity'
+      };
+      return labels[key] || key;
+    }
+
+    function formatTimestamp(ts) {
+      try {
+        const d = new Date(ts);
+        return d.toLocaleString(undefined, {
+          year: 'numeric', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+      } catch {
+        return ts;
+      }
+    }
+
+    function renderScore(data) {
+      hideMessages();
+
+      const score = data.privacyHealthScore;
+      const grade = data.grade;
+      const color = scoreColor(score);
+
+      // Gauge
+      const gaugeFill = document.getElementById('gaugeFill');
+      const offset = CIRCUMFERENCE - (score / 100) * CIRCUMFERENCE;
+      gaugeFill.style.stroke = strokeColor(score);
+      // Trigger animation by setting offset after a frame
+      requestAnimationFrame(() => {
+        gaugeFill.style.strokeDashoffset = offset;
+      });
+
+      const gaugeScore = document.getElementById('gaugeScore');
+      gaugeScore.textContent = score;
+      gaugeScore.className = 'gauge-score color-' + color;
+
+      const gaugeGrade = document.getElementById('gaugeGrade');
+      gaugeGrade.textContent = grade;
+      gaugeGrade.className = 'gauge-grade color-' + color;
+
+      // Interpretation
+      document.getElementById('interpretation').textContent = data.interpretation || '';
+
+      // Timestamp
+      document.getElementById('timestamp').textContent = data.timestamp
+        ? 'Last calculated: ' + formatTimestamp(data.timestamp)
+        : '';
+
+      // Breakdown cards
+      const grid = document.getElementById('breakdownGrid');
+      grid.innerHTML = '';
+
+      if (data.breakdown) {
+        const order = ['shieldedRatio', 'networkActivity', 'decentralization', 'ecosystemDiversity'];
+        for (const key of order) {
+          const item = data.breakdown[key];
+          if (!item) continue;
+
+          const card = document.createElement('div');
+          card.className = 'breakdown-card';
+          const c = scoreColor(item.score);
+          card.innerHTML = `
+            <div class="breakdown-header">
+              <span class="breakdown-name">${componentLabel(key)}</span>
+              <span class="breakdown-weight">${item.weight}</span>
+            </div>
+            <div class="breakdown-bar-track">
+              <div class="breakdown-bar-fill bg-${c}" style="width: 0%;" data-target="${item.score}"></div>
+            </div>
+            <div class="breakdown-meta">
+              <span class="breakdown-score color-${c}">${item.score}/100</span>
+              <span class="breakdown-value">${item.value}</span>
+            </div>
+          `;
+          grid.appendChild(card);
+        }
+
+        // Animate bars
+        requestAnimationFrame(() => {
+          grid.querySelectorAll('.breakdown-bar-fill').forEach(bar => {
+            bar.style.width = bar.dataset.target + '%';
+          });
+        });
+      }
+
+      scoreSection.classList.add('visible');
+    }
+
+    async function fetchScore() {
+      hideMessages();
+      loadingMsg.style.display = 'block';
+      scoreSection.classList.remove('visible');
+      refreshBtn.disabled = true;
+
+      try {
+        const resp = await fetch('/api/privacy-score');
+        if (!resp.ok) {
+          const body = await resp.text();
+          throw new Error(body || `Server returned ${resp.status}`);
+        }
+        const data = await resp.json();
+        renderScore(data);
+      } catch (err) {
+        showError('Failed to fetch privacy score: ' + err.message);
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    // Auto-fetch on load
+    fetchScore();
+  </script>
+
+</body>
+</html>
