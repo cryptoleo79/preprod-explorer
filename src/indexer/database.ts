@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 import config from '../config.js';
@@ -6,7 +6,7 @@ import config from '../config.js';
 // Ensure data directory exists
 mkdirSync(dirname(config.database.path), { recursive: true });
 
-export const db = new Database(config.database.path);
+export const db: DatabaseType = new Database(config.database.path);
 
 export function initDatabase(): void {
   console.log('Initializing database...');

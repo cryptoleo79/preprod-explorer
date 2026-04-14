@@ -272,7 +272,7 @@ export async function indexBlock(api: ApiPromise, blockNum: number): Promise<num
           event_index: i,
           section: event.section,
           method: event.method,
-          data: JSON.stringify(event.data.map((d) => d.toString())),
+          data: JSON.stringify(event.data.map((d: any) => d.toString())),
           timestamp: ts,
         });
       }

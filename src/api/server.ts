@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   getStats,
   getBlocks,
@@ -35,6 +37,11 @@ const app = express();
 
 app.use(cors({ origin: true }));
 app.use(express.json());
+
+// Serve static tools pages
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use('/tools', express.static(path.resolve(__dirname, '../../tools')));
 
 // Rewrite non-API paths to /api/ prefix for nginx proxy compatibility
 // Exclude paths that have their own non-prefixed route aliases
@@ -1080,6 +1087,7 @@ function getDocsHTML(baseUrl: string) {
         <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Privacy</h3>
         <ul class="space-y-1">
           <li><a href="#privacy" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/analytics/privacy</a></li>
+          <li><a href="#privacy-score" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/privacy-score</a></li>
           <li><a href="#midnight-txs" class="block px-2 py-1 rounded hover:bg-dark-100 text-slate-300 hover:text-white">/api/midnight-txs</a></li>
         </ul>
       </div>
@@ -1517,6 +1525,30 @@ function getDocsHTML(baseUrl: string) {
 }</code></pre>
         </div>
 
+        <div id="privacy-score" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-xs font-bold px-2 py-0.5 rounded">GET</span>
+              <code class="text-white">/api/privacy-score</code>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="copyUrl('/api/privacy-score')" class="copy-btn text-xs bg-dark-100 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded">Copy URL</button>
+              <a href="${baseUrl}/api/privacy-score" target="_blank" class="text-xs bg-midnight-500/20 hover:bg-midnight-500/30 text-midnight-400 px-2 py-1 rounded">Try it</a>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-1">Composite Privacy Health Score — weighted metric combining shielded ratio, network activity, decentralization, and ecosystem diversity. Unique to NightForge.</p>
+          <pre class="bg-dark-400 rounded p-3 text-xs text-slate-300 overflow-x-auto"><code>{
+  "privacyHealthScore": 72, "grade": "B+",
+  "breakdown": {
+    "shieldedRatio": { "score": 100, "weight": "40%", "value": "83.0% shielded" },
+    "networkActivity": { "score": 50, "weight": "25%", "value": "0.250 TPS" },
+    "decentralization": { "score": 60, "weight": "20%", "value": "12 validators" },
+    "ecosystemDiversity": { "score": 40, "weight": "15%", "value": "20 contracts" }
+  },
+  "interpretation": "Midnight privacy health is good. Room for improvement..."
+}</code></pre>
+        </div>
+
         <div id="midnight-txs" class="mb-8 bg-dark-200 rounded-lg border border-slate-800 p-5">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
@@ -1758,6 +1790,298 @@ function getDocsHTML(baseUrl: string) {
 </html>`;
 }
 
+// ─── Enhanced Address Lookup ─────────────────────────────────────
+app.get('/api/address/:address/detail', async (req, res) => {
+  try {
+    const address = req.params.address;
+    const indexerUrl = 'https://indexer.preprod.midnight.network/api/v4/graphql';
+
+    // Query indexer for address transactions
+    const resp = await fetch(indexerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `{
+          transactions(
+            where: { unshieldedCreatedOutputs_some: { owner: "${address}" } }
+            orderBy: BLOCK_HEIGHT_DESC
+            limit: 100
+          ) {
+            hash
+            blockHeight
+            timestamp
+            fees { paidFees }
+            unshieldedCreatedOutputs { owner value tokenType spentAtTransaction { hash } }
+          }
+        }`,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await resp.json();
+    const txs = data?.data?.transactions || [];
+
+    // Compute balance from unspent outputs
+    let balance = 0n;
+    let totalReceived = 0n;
+    let totalSpent = 0n;
+    let txCount = 0;
+    let firstSeen = Infinity;
+    let lastSeen = 0;
+
+    for (const tx of txs) {
+      txCount++;
+      const ts = tx.timestamp || 0;
+      if (ts < firstSeen) firstSeen = ts;
+      if (ts > lastSeen) lastSeen = ts;
+
+      for (const o of (tx.unshieldedCreatedOutputs || [])) {
+        if (o.owner === address) {
+          const val = BigInt(o.value || 0);
+          totalReceived += val;
+          if (!o.spentAtTransaction) {
+            balance += val;
+          } else {
+            totalSpent += val;
+          }
+        }
+      }
+    }
+
+    res.json({
+      address,
+      balance: (Number(balance) / 1_000_000).toFixed(6),
+      totalReceived: (Number(totalReceived) / 1_000_000).toFixed(6),
+      totalSpent: (Number(totalSpent) / 1_000_000).toFixed(6),
+      transactionCount: txCount,
+      firstSeen: firstSeen < Infinity ? new Date(firstSeen * 1000).toISOString() : null,
+      lastSeen: lastSeen > 0 ? new Date(lastSeen * 1000).toISOString() : null,
+      isShielded: address.startsWith('mn_shield'),
+      poweredBy: 'NightForge Explorer',
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── DUST Tools ──────────────────────────────────────────────────
+// DUST Calculator: How much DUST does X NIGHT generate?
+app.get('/api/dust-calculator', (req, res) => {
+  try {
+    const night = parseFloat(req.query.night as string) || 0;
+    const SPECKS_PER_STAR_PER_SEC = 8267;
+    const STARS_PER_NIGHT = 1_000_000;
+    const SPECKS_PER_DUST = 1_000_000_000_000_000n;
+    const CAP_RATIO = 5; // 5 DUST per NIGHT max
+    const TIME_TO_CAP_SEC = 604815; // ~7 days
+
+    const specksPerSec = night * STARS_PER_NIGHT * SPECKS_PER_STAR_PER_SEC;
+    const dustPerDay = (specksPerSec * 86400) / Number(SPECKS_PER_DUST);
+    const dustPerWeek = dustPerDay * 7;
+    const maxDust = night * CAP_RATIO;
+    const daysToMax = TIME_TO_CAP_SEC / 86400;
+
+    res.json({
+      nightHeld: night,
+      dustPerDay: parseFloat(dustPerDay.toFixed(6)),
+      dustPerWeek: parseFloat(dustPerWeek.toFixed(6)),
+      maxCapacity: maxDust,
+      daysToMaxCapacity: parseFloat(daysToMax.toFixed(1)),
+      specksPerSecond: specksPerSec,
+      note: 'DUST is non-transferable and decays when backing NIGHT is spent',
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Check DUST generation status by Cardano reward address
+app.get('/api/dust-status', async (req, res) => {
+  try {
+    const address = req.query.address as string;
+    if (!address || !address.startsWith('stake')) {
+      return res.status(400).json({ error: 'Provide a Cardano reward address (stake1... or stake_test1...)' });
+    }
+    const indexerUrl = 'https://indexer.preprod.midnight.network/api/v4/graphql';
+    const resp = await fetch(indexerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `query { dustGenerationStatus(cardanoRewardAddresses: ["${address}"]) { registered nightBalance generationRate maxCapacity currentCapacity } }`,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await resp.json();
+    const status = data?.data?.dustGenerationStatus?.[0];
+    if (!status) return res.json({ registered: false, address, message: 'No registration found for this address' });
+    res.json({
+      address,
+      registered: status.registered,
+      nightBalance: status.nightBalance,
+      generationRate: status.generationRate,
+      maxCapacity: status.maxCapacity,
+      currentCapacity: status.currentCapacity,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── DUST Economics Observatory ──────────────────────────────────
+// Network-wide DUST economics — unique to NightForge
+app.get('/api/dust-economics', async (req, res) => {
+  try {
+    const stats = getStats(); // existing function that returns indexer stats
+    const overview = (getNetworkOverviewData?.() || {}) as any;
+
+    const SPECKS_PER_STAR_PER_SEC = 8267;
+    const STARS_PER_NIGHT = 1_000_000;
+    const SPECKS_PER_DUST = 1e15;
+    const CAP_RATIO = 5;
+    const TIME_TO_CAP_SEC = 604815;
+
+    // Estimate network dust generation from total NIGHT supply
+    // This is an approximation based on known tokenomics
+    const totalNightSupply = 4_500_000_000; // 4.5B total NIGHT
+    const estimatedStakedNight = totalNightSupply * 0.3; // ~30% estimated staked
+
+    const networkSpecksPerSec = estimatedStakedNight * STARS_PER_NIGHT * SPECKS_PER_STAR_PER_SEC;
+    const networkDustPerDay = (networkSpecksPerSec * 86400) / SPECKS_PER_DUST;
+    const networkMaxCapacity = estimatedStakedNight * CAP_RATIO;
+
+    // Transaction fee burn estimate (from extrinsic count)
+    const avgDustPerTx = 300_000_000; // ~300M specks average fee
+    const dailyTxEstimate = (overview.extrinsics || stats.extrinsics || 0) / Math.max(1, (overview.networkAgeDays || 1));
+    const dailyDustBurn = (dailyTxEstimate * avgDustPerTx) / SPECKS_PER_DUST;
+
+    const netDustFlow = networkDustPerDay - dailyDustBurn;
+
+    res.json({
+      observatory: 'NightForge DUST Economics',
+      generation: {
+        estimatedStakedNight: estimatedStakedNight,
+        dustPerDay: parseFloat(networkDustPerDay.toFixed(2)),
+        dustPerWeek: parseFloat((networkDustPerDay * 7).toFixed(2)),
+        maxNetworkCapacity: networkMaxCapacity,
+        daysToMaxCapacity: parseFloat((TIME_TO_CAP_SEC / 86400).toFixed(1)),
+      },
+      consumption: {
+        avgDailyTransactions: parseFloat(dailyTxEstimate.toFixed(0)),
+        estimatedDustBurnPerDay: parseFloat(dailyDustBurn.toFixed(2)),
+        avgFeePerTransaction: `${(avgDustPerTx / 1e6).toFixed(0)}M specks`,
+      },
+      netFlow: {
+        dailyNetDust: parseFloat(netDustFlow.toFixed(2)),
+        status: netDustFlow > 0 ? 'surplus' : 'deficit',
+        sustainabilityScore: parseFloat(Math.min(100, (networkDustPerDay / Math.max(1, dailyDustBurn) * 100)).toFixed(1)),
+      },
+      parameters: {
+        specksPerStarPerSecond: SPECKS_PER_STAR_PER_SEC,
+        starsPerNight: STARS_PER_NIGHT,
+        specksPerDust: '1e15',
+        capRatio: CAP_RATIO,
+        timeToCapSeconds: TIME_TO_CAP_SEC,
+        gracePeriodHours: 3,
+      },
+      note: 'Estimates based on tokenomics parameters. Actual values depend on registration rates.',
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Privacy Health Score ────────────────────────────────────────
+// Composite privacy metric — unique to NightForge, unique to crypto
+app.get('/api/privacy-score', (req, res) => {
+  try {
+    const privacyData = getPrivacyFromEvents();
+    const overview = getNetworkOverviewData();
+
+    // Component scores (0-100 each)
+    const shieldedRatio = (privacyData.shieldedRatio || 0) * 100; // % of txs that are shielded
+    const shieldedScore = Math.min(100, shieldedRatio * 1.2); // Boost: >83% shielded = perfect score
+
+    // Network activity score — active network = healthy privacy
+    const tps = overview.tps || 0;
+    const activityScore = Math.min(100, tps * 200); // 0.5 TPS = perfect score
+
+    // Decentralization score from committee/validator count
+    const committeeSize = overview.committeeSize || 0;
+    const decentralizationScore = Math.min(100, committeeSize * 5); // 20 validators = perfect
+
+    // Contract diversity — more contracts = more privacy use cases
+    const contracts = overview.contractDeploys || 0;
+    const diversityScore = Math.min(100, contracts * 2); // 50 contracts = perfect
+
+    // Composite score (weighted average)
+    const composite = Math.round(
+      shieldedScore * 0.40 +       // 40% weight: shielded ratio is king
+      activityScore * 0.25 +        // 25% weight: network usage
+      decentralizationScore * 0.20 + // 20% weight: validator spread
+      diversityScore * 0.15          // 15% weight: ecosystem breadth
+    );
+
+    const grade = composite >= 90 ? 'A+' : composite >= 80 ? 'A' : composite >= 70 ? 'B+' :
+                  composite >= 60 ? 'B' : composite >= 50 ? 'C' : composite >= 40 ? 'D' : 'F';
+
+    res.json({
+      privacyHealthScore: composite,
+      grade,
+      breakdown: {
+        shieldedRatio: { score: Math.round(shieldedScore), weight: '40%', value: `${shieldedRatio.toFixed(1)}% shielded` },
+        networkActivity: { score: Math.round(activityScore), weight: '25%', value: `${tps.toFixed(3)} TPS` },
+        decentralization: { score: Math.round(decentralizationScore), weight: '20%', value: `${committeeSize} validators` },
+        ecosystemDiversity: { score: Math.round(diversityScore), weight: '15%', value: `${contracts} contracts` },
+      },
+      interpretation: composite >= 80
+        ? 'Midnight privacy health is excellent. High shielded ratio with active network usage.'
+        : composite >= 60
+        ? 'Midnight privacy health is good. Room for improvement in adoption and shielding.'
+        : 'Midnight privacy health needs attention. Encourage more shielded transactions.',
+      timestamp: new Date().toISOString(),
+      poweredBy: 'NightForge Explorer — nightforge.jp',
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Embeddable Widgets ──────────────────────────────────────────
+// Let other sites embed NightForge stats — drives traffic and brand recognition
+app.get('/api/widget/block-height', (req, res) => {
+  const stats = getStats();
+  const height = stats.latestBlock || 0;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="28" viewBox="0 0 200 28">
+    <rect width="200" height="28" rx="6" fill="#0f172a"/>
+    <rect width="100" height="28" rx="6" fill="#0ABAB5"/>
+    <text x="50" y="18" text-anchor="middle" fill="white" font-family="monospace" font-size="11" font-weight="bold">MIDNIGHT</text>
+    <text x="150" y="18" text-anchor="middle" fill="#0ABAB5" font-family="monospace" font-size="11">#${height.toLocaleString()}</text>
+  </svg>`;
+  res.type('image/svg+xml').send(svg);
+});
+
+app.get('/api/widget/privacy-score', (req, res) => {
+  const privacy = getPrivacyFromEvents() || {};
+  const ratio = Math.round((privacy.shieldedRatio || 0) * 100);
+  const color = ratio >= 80 ? '#10b981' : ratio >= 50 ? '#f59e0b' : '#ef4444';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="28" viewBox="0 0 220 28">
+    <rect width="220" height="28" rx="6" fill="#0f172a"/>
+    <rect width="120" height="28" rx="6" fill="${color}"/>
+    <text x="60" y="18" text-anchor="middle" fill="white" font-family="monospace" font-size="10" font-weight="bold">PRIVACY</text>
+    <text x="170" y="18" text-anchor="middle" fill="${color}" font-family="monospace" font-size="11">${ratio}% shielded</text>
+  </svg>`;
+  res.type('image/svg+xml').send(svg);
+});
+
+app.get('/api/widget/dust-rate', (req, res) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="28" viewBox="0 0 200 28">
+    <rect width="200" height="28" rx="6" fill="#0f172a"/>
+    <rect width="80" height="28" rx="6" fill="#f59e0b"/>
+    <text x="40" y="18" text-anchor="middle" fill="white" font-family="monospace" font-size="11" font-weight="bold">DUST</text>
+    <text x="140" y="18" text-anchor="middle" fill="#f59e0b" font-family="monospace" font-size="10">5 per NIGHT/wk</text>
+  </svg>`;
+  res.type('image/svg+xml').send(svg);
+});
+
 app.get('/api/docs', (req, res) => {
   res.type('html').send(getDocsHTML('https://preprod.nightforge.jp'));
 });
@@ -1793,6 +2117,9 @@ export function startAPI() {
     console.log(`  GET /api/governance - Governance dashboard`);
     console.log(`  GET /api/epochs - Epoch timeline`);
     console.log(`  GET /api/cardano-anchors - Cardano anchor points`);
+    console.log(`  GET /api/address/:address - Address activity lookup`);
+    console.log(`  GET /api/privacy-score - Privacy Health Score (composite metric)`);
+    console.log(`  GET /api/dust-economics - DUST Economics Observatory`);
   });
 }
 
