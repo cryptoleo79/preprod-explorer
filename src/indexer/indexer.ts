@@ -29,9 +29,14 @@ export async function connectToChain(): Promise<ApiPromise> {
 
   provider.on('error', (err) => {
     console.log('WebSocket error:', err.message);
+    scheduleReconnect(); // Safety net — don't let errors go unhandled
   });
 
-  api = await ApiPromise.create({ provider, noInitWarn: true });
+  // Timeout prevents hung await if WsProvider gets stuck
+  api = await Promise.race([
+    ApiPromise.create({ provider, noInitWarn: true }),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('ApiPromise.create timed out after 30s')), 30000)),
+  ]);
   console.log('Connected to RPC');
   reconnectAttempts = 0;
 
@@ -272,7 +277,7 @@ export async function indexBlock(api: ApiPromise, blockNum: number): Promise<num
           event_index: i,
           section: event.section,
           method: event.method,
-          data: JSON.stringify(event.data.map((d) => d.toString())),
+          data: JSON.stringify(event.data.map((d: any) => d.toString())),
           timestamp: ts,
         });
       }

@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 import config from '../config.js';
@@ -6,7 +6,7 @@ import config from '../config.js';
 // Ensure data directory exists
 mkdirSync(dirname(config.database.path), { recursive: true });
 
-export const db = new Database(config.database.path);
+export const db: DatabaseType = new Database(config.database.path);
 
 export function initDatabase(): void {
   console.log('Initializing database...');
@@ -469,7 +469,7 @@ export function getPrivacyFromEvents(hours?: number) {
   const contractDeploys = (db.prepare("SELECT COUNT(*) as count FROM events WHERE section = 'midnight' AND method = 'ContractDeploy'").get() as { count: number }).count;
   const contractCalls = (db.prepare("SELECT COUNT(*) as count FROM events WHERE section = 'midnight' AND method = 'ContractCall'").get() as { count: number }).count;
 
-  const shieldedRatio = totalTxApplied > 0 ? Math.round((shieldedTxCount / totalTxApplied) * 100) / 100 : 0;
+  const shieldedRatio = totalTxApplied > 0 ? Math.round((shieldedTxCount / totalTxApplied) * 10000) / 10000 : 0;
 
   // Get unshielded details
   const unshieldedDetails = db.prepare(`
@@ -816,5 +816,35 @@ export function getCardanoAnchors(limit = 50) {
       totalDeregistrations: deregistrations.length,
       totalMappings: mappings.length,
     },
+  };
+}
+
+export function getAddressActivity(address: string, limit = 50) {
+  // Transactions signed by this address
+  const transactions = db.prepare(`
+    SELECT * FROM extrinsics WHERE signer = ? ORDER BY block_height DESC LIMIT ?
+  `).all(address, limit) as any[];
+
+  // Events that reference this address in their data
+  const events = db.prepare(`
+    SELECT e.* FROM events e WHERE e.data LIKE '%' || ? || '%' ORDER BY e.block_height DESC LIMIT ?
+  `).all(address, limit) as any[];
+
+  const transactionCount = transactions.length;
+  const allBlocks = [
+    ...transactions.map((t: any) => t.block_height),
+    ...events.map((e: any) => e.block_height),
+  ].filter(Boolean);
+
+  const firstSeen = allBlocks.length > 0 ? Math.min(...allBlocks) : null;
+  const lastSeen = allBlocks.length > 0 ? Math.max(...allBlocks) : null;
+
+  return {
+    address,
+    transactionCount,
+    firstSeen,
+    lastSeen,
+    transactions,
+    events,
   };
 }

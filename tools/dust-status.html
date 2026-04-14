@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DUST Status Checker - NightForge Explorer</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Check your DUST generation status on the Midnight Network. Enter your Cardano reward address to view registration, balance, and generation rate." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+
+    /* Header */
+    .header {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(12px);
+      padding: 1rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: #e2e8f0;
+    }
+    .header-brand img {
+      height: 32px;
+      width: 32px;
+      border-radius: 6px;
+    }
+    .header-brand span {
+      font-weight: 700;
+      font-size: 1.125rem;
+      background: linear-gradient(135deg, #f97316, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-nav {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .header-nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .header-nav a:hover { color: #f97316; }
+    .header-nav a.active { color: #f97316; }
+
+    /* Main content */
+    .main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+
+    /* Page header */
+    .page-title {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .page-title h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #22c55e, #06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .page-title p {
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    /* Search box */
+    .search-box {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .search-box label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.625rem;
+    }
+    .input-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+    .search-box input[type="text"] {
+      flex: 1;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.875rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-box input[type="text"]::placeholder { color: #475569; }
+    .search-box input[type="text"]:focus { border-color: #22c55e; }
+    .btn-check {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 0.75rem 1.5rem;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-check:hover {
+      background: linear-gradient(135deg, #4ade80, #22c55e);
+      box-shadow: 0 4px 16px rgba(34,197,94,0.4);
+    }
+    .btn-check:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Status/error messages */
+    .msg {
+      text-align: center;
+      padding: 1rem;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+    .msg-error {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: #fca5a5;
+    }
+    .msg-loading {
+      background: rgba(6,182,212,0.08);
+      border: 1px solid rgba(6,182,212,0.2);
+      color: #67e8f9;
+    }
+
+    /* Results */
+    .results {
+      display: none;
+    }
+    .results.visible {
+      display: block;
+      animation: fadeIn 0.3s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.875rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-registered {
+      background: rgba(34,197,94,0.15);
+      color: #4ade80;
+      border: 1px solid rgba(34,197,94,0.3);
+    }
+    .badge-unregistered {
+      background: rgba(239,68,68,0.12);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .badge-registered .badge-dot { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+    .badge-unregistered .badge-dot { background: #ef4444; }
+
+    .result-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 1rem;
+    }
+    .result-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+    .result-card-header h2 {
+      font-size: 1.125rem;
+      font-weight: 700;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .stat-item {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.375rem;
+    }
+    .stat-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+    .stat-value.highlight { color: #4ade80; }
+    .stat-value.cyan { color: #22d3ee; }
+    .stat-value.orange { color: #fb923c; }
+    .stat-sub {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
+
+    /* Info box */
+    .info-box {
+      background: rgba(6,182,212,0.06);
+      border: 1px solid rgba(6,182,212,0.15);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+    .info-box h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #67e8f9;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .info-box p {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin-bottom: 0.75rem;
+    }
+    .info-box p:last-child { margin-bottom: 0; }
+    .info-box a {
+      color: #22d3ee;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .info-box a:hover {
+      text-decoration: underline;
+    }
+
+    /* CTA for unregistered */
+    .cta-register {
+      display: none;
+      background: linear-gradient(135deg, rgba(249,115,22,0.1), rgba(234,179,8,0.08));
+      border: 1px solid rgba(249,115,22,0.25);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-top: 1rem;
+      text-align: center;
+    }
+    .cta-register.visible { display: block; }
+    .cta-register p {
+      color: #fbbf24;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .cta-register a {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      color: #fff;
+      text-decoration: none;
+      padding: 0.625rem 1.5rem;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+    .cta-register a:hover {
+      background: linear-gradient(135deg, #fb923c, #f97316);
+      box-shadow: 0 4px 16px rgba(249,115,22,0.4);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      color: #475569;
+      font-size: 0.8rem;
+    }
+    .footer a { color: #64748b; text-decoration: none; }
+    .footer a:hover { color: #f97316; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(103,232,249,0.3);
+      border-top-color: #67e8f9;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 600px) {
+      .input-row { flex-direction: column; }
+      .btn-check { width: 100%; }
+      .stat-grid { grid-template-columns: 1fr; }
+      .page-title h1 { font-size: 1.5rem; }
+      .header-nav { gap: 0.75rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="header-brand">
+        <img src="/night-logo.webp" alt="NightForge" />
+        <span>NightForge</span>
+      </a>
+      <nav class="header-nav">
+        <a href="/">Explorer</a>
+        <a href="/tools/">Tools</a>
+        <a href="/tools/dust-status.html" class="active">DUST Status</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <div class="page-title">
+      <h1>DUST Status Checker</h1>
+      <p>Enter your Cardano reward address to check your DUST registration status, NIGHT balance, and generation rate.</p>
+    </div>
+
+    <!-- Search -->
+    <div class="search-box">
+      <label for="addressInput">Cardano Reward Address</label>
+      <div class="input-row">
+        <input type="text" id="addressInput" placeholder="stake1u8a9qstrmj4rvc3k5z8fems7f0j2vztz8det6mghz3wv2qcvzuure" spellcheck="false" autocomplete="off" />
+        <button class="btn-check" id="checkBtn" onclick="checkStatus()">Check Status</button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div class="msg msg-error" id="errorMsg"></div>
+    <div class="msg msg-loading" id="loadingMsg"><span class="spinner"></span>Fetching DUST status...</div>
+
+    <!-- Results -->
+    <div class="results" id="results">
+      <div class="result-card">
+        <div class="result-card-header">
+          <h2>DUST Status</h2>
+          <div id="statusBadge"></div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="stat-label">NIGHT Balance</div>
+            <div class="stat-value highlight" id="nightBalance">--</div>
+            <div class="stat-sub" id="nightBalanceSub"></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Generation Rate</div>
+            <div class="stat-value cyan" id="genRate">--</div>
+            <div class="stat-sub">DUST per epoch</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Capacity</div>
+            <div class="stat-value orange" id="capacity">--</div>
+            <div class="stat-sub" id="capacitySub"></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">DUST Accumulated</div>
+            <div class="stat-value" id="dustAccum">--</div>
+            <div class="stat-sub" id="dustAccumSub"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA for unregistered users -->
+      <div class="cta-register" id="ctaRegister">
+        <p>This address is not registered for DUST generation. Register now to start earning DUST from your NIGHT holdings.</p>
+        <a href="https://dust.nethermind.dev" target="_blank" rel="noopener noreferrer">Register at Nethermind DUST Generator &rarr;</a>
+      </div>
+    </div>
+
+    <!-- Info section -->
+    <div class="info-box">
+      <h3>
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 5a1 1 0 110 2 1 1 0 010-2zm-1 4h2v6h-2v-6z" fill="currentColor"/></svg>
+        What is DUST registration?
+      </h3>
+      <p>DUST is the gas token on the Midnight Network, required for all transaction fees. It is generated passively by holders of NIGHT tokens on the Cardano blockchain.</p>
+      <p>To start generating DUST, you must register your Cardano reward address (starting with <code style="background:rgba(255,255,255,0.06);padding:0.125rem 0.375rem;border-radius:4px;font-size:0.8rem;">stake1...</code>) through the Nethermind DUST Generator DApp. Once registered, DUST accrues each epoch based on your NIGHT balance.</p>
+      <p>Your generation rate and capacity depend on the amount of NIGHT tokens you hold. The more NIGHT, the faster your DUST accumulates and the higher your maximum capacity.</p>
+      <p>Register here: <a href="https://dust.nethermind.dev" target="_blank" rel="noopener noreferrer">Nethermind DUST Generator DApp</a></p>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2026 <a href="/">NightForge Explorer</a> &mdash; Built for the Midnight Network</p>
+  </footer>
+
+  <script>
+    const addressInput = document.getElementById('addressInput');
+    const checkBtn = document.getElementById('checkBtn');
+    const errorMsg = document.getElementById('errorMsg');
+    const loadingMsg = document.getElementById('loadingMsg');
+    const resultsEl = document.getElementById('results');
+
+    // Allow Enter key to trigger check
+    addressInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') checkStatus();
+    });
+
+    // Pre-fill from URL params
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const addr = params.get('address') || params.get('addr');
+      if (addr) {
+        addressInput.value = addr;
+        checkStatus();
+      }
+    })();
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      loadingMsg.style.display = 'none';
+      resultsEl.classList.remove('visible');
+    }
+
+    function hideMessages() {
+      errorMsg.style.display = 'none';
+      loadingMsg.style.display = 'none';
+    }
+
+    function formatNumber(n, decimals = 2) {
+      if (n === null || n === undefined) return '--';
+      const num = parseFloat(n);
+      if (isNaN(num)) return '--';
+      if (num >= 1e9) return (num / 1e9).toFixed(decimals) + 'B';
+      if (num >= 1e6) return (num / 1e6).toFixed(decimals) + 'M';
+      if (num >= 1e3) return num.toLocaleString(undefined, { maximumFractionDigits: decimals });
+      return num.toFixed(decimals);
+    }
+
+    async function checkStatus() {
+      const address = addressInput.value.trim();
+
+      if (!address) {
+        showError('Please enter a Cardano reward address.');
+        return;
+      }
+      if (!address.startsWith('stake1')) {
+        showError('Address must be a Cardano reward address starting with "stake1..."');
+        return;
+      }
+
+      hideMessages();
+      loadingMsg.style.display = 'block';
+      resultsEl.classList.remove('visible');
+      document.getElementById('ctaRegister').classList.remove('visible');
+      checkBtn.disabled = true;
+
+      try {
+        const resp = await fetch(`/api/dust-status?address=${encodeURIComponent(address)}`);
+        if (!resp.ok) {
+          const body = await resp.text();
+          throw new Error(body || `Server returned ${resp.status}`);
+        }
+        const data = await resp.json();
+        renderResults(data);
+      } catch (err) {
+        showError('Failed to fetch status: ' + err.message);
+      } finally {
+        checkBtn.disabled = false;
+      }
+    }
+
+    function renderResults(data) {
+      hideMessages();
+
+      // Registration badge
+      const badge = document.getElementById('statusBadge');
+      const isRegistered = data.registered !== false;
+      if (isRegistered) {
+        badge.innerHTML = '<span class="status-badge badge-registered"><span class="badge-dot"></span>Registered</span>';
+      } else {
+        badge.innerHTML = '<span class="status-badge badge-unregistered"><span class="badge-dot"></span>Not Registered</span>';
+        document.getElementById('ctaRegister').classList.add('visible');
+      }
+
+      // NIGHT balance
+      const nightBal = document.getElementById('nightBalance');
+      const nightSub = document.getElementById('nightBalanceSub');
+      nightBal.textContent = formatNumber(data.nightBalance || data.night_balance || 0);
+      if (data.nightBalance || data.night_balance) {
+        const raw = parseFloat(data.nightBalance || data.night_balance || 0);
+        nightSub.textContent = raw.toLocaleString(undefined, { maximumFractionDigits: 6 }) + ' NIGHT';
+      } else {
+        nightSub.textContent = '';
+      }
+
+      // Generation rate
+      document.getElementById('genRate').textContent = formatNumber(data.generationRate || data.generation_rate || 0);
+
+      // Capacity
+      const cap = document.getElementById('capacity');
+      const capSub = document.getElementById('capacitySub');
+      cap.textContent = formatNumber(data.capacity || 0);
+      capSub.textContent = data.capacityPct != null ? (parseFloat(data.capacityPct).toFixed(1) + '% filled') : 'max DUST storable';
+
+      // DUST accumulated
+      const dustEl = document.getElementById('dustAccum');
+      const dustSub = document.getElementById('dustAccumSub');
+      dustEl.textContent = formatNumber(data.dustAccumulated || data.dust_accumulated || data.dustBalance || 0);
+      dustSub.textContent = data.lastClaim ? ('Last claim: ' + data.lastClaim) : '';
+
+      resultsEl.classList.add('visible');
+    }
+  </script>
+
+</body>
+</html>
