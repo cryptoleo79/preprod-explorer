@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shielded Pool Analytics - NightForge Explorer</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Shielded pool analytics for the Midnight Network. Track shielded vs unshielded transactions, privacy health score, and anonymity set strength." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+
+    /* Header */
+    .header {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(12px);
+      padding: 1rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: #e2e8f0;
+    }
+    .header-brand img {
+      height: 32px;
+      width: 32px;
+      border-radius: 6px;
+    }
+    .header-brand span {
+      font-weight: 700;
+      font-size: 1.125rem;
+      background: linear-gradient(135deg, #f97316, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-nav {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .header-nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .header-nav a:hover { color: #f97316; }
+    .header-nav a.active { color: #06b6d4; }
+
+    /* Main content */
+    .main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+
+    /* Page header */
+    .page-title {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .page-title h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #06b6d4, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .page-title p {
+      color: #94a3b8;
+      line-height: 1.6;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Loading */
+    .loading-state {
+      text-align: center;
+      padding: 3rem;
+      color: #67e8f9;
+      font-size: 0.9rem;
+    }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(103,232,249,0.3);
+      border-top-color: #67e8f9;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Big numbers row */
+    .big-numbers {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .big-num-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.5rem;
+      text-align: center;
+      animation: fadeIn 0.3s ease-out;
+    }
+    .big-num-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.5rem;
+    }
+    .big-num-value {
+      font-size: 2rem;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    }
+    .big-num-value.cyan { color: #22d3ee; }
+    .big-num-value.orange { color: #fb923c; }
+    .big-num-value.green { color: #4ade80; }
+    .big-num-sub {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
+
+    /* Section cards */
+    .section-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+      animation: fadeIn 0.3s ease-out;
+    }
+    .section-card h2 {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .section-card h2 svg { flex-shrink: 0; }
+
+    /* Donut chart */
+    .donut-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2.5rem;
+      flex-wrap: wrap;
+    }
+    .donut-svg { flex-shrink: 0; }
+    .donut-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .legend-dot.cyan { background: #06b6d4; }
+    .legend-dot.orange { background: #f97316; }
+    .legend-label { font-size: 0.85rem; color: #94a3b8; }
+    .legend-value { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin-left: auto; padding-left: 1rem; font-family: 'JetBrains Mono', monospace; }
+
+    /* Trend chart */
+    .trend-chart-wrap {
+      width: 100%;
+      overflow-x: auto;
+    }
+    .trend-empty {
+      text-align: center;
+      padding: 2rem;
+      color: #475569;
+      font-size: 0.85rem;
+    }
+
+    /* Anonymity gauge */
+    .gauge-wrap {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .gauge-bar-container {
+      flex: 1;
+      min-width: 200px;
+    }
+    .gauge-bar-bg {
+      width: 100%;
+      height: 16px;
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+    .gauge-bar-fill {
+      height: 100%;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #06b6d4, #22d3ee, #4ade80);
+      transition: width 0.8s ease-out;
+    }
+    .gauge-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.375rem;
+      font-size: 0.7rem;
+      color: #475569;
+    }
+    .gauge-result {
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .gauge-strength {
+      font-size: 1.5rem;
+      font-weight: 800;
+    }
+    .gauge-strength.strong { color: #4ade80; }
+    .gauge-strength.good { color: #22d3ee; }
+    .gauge-strength.moderate { color: #fbbf24; }
+    .gauge-strength.weak { color: #f87171; }
+    .gauge-desc {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
+
+    /* Privacy health score */
+    .health-score-row {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+    .health-score-big {
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .score-circle {
+      width: 100px;
+      height: 100px;
+      position: relative;
+    }
+    .score-number {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .score-number .val {
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: #22d3ee;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .score-number .grade {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #4ade80;
+    }
+    .health-breakdown {
+      flex: 1;
+      min-width: 200px;
+    }
+    .breakdown-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .breakdown-item:last-child { border-bottom: none; }
+    .breakdown-label { font-size: 0.85rem; color: #94a3b8; }
+    .breakdown-val { font-size: 0.85rem; font-weight: 700; color: #f1f5f9; font-family: 'JetBrains Mono', monospace; }
+
+    /* Flow summary */
+    .flow-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .flow-box {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      text-align: center;
+      min-width: 160px;
+    }
+    .flow-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.375rem;
+    }
+    .flow-value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .flow-value.cyan { color: #22d3ee; }
+    .flow-value.orange { color: #fb923c; }
+    .flow-arrow {
+      font-size: 1.5rem;
+      color: #475569;
+    }
+
+    /* Info box */
+    .info-box {
+      background: rgba(6,182,212,0.06);
+      border: 1px solid rgba(6,182,212,0.15);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+    .info-box h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #67e8f9;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .info-box p {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin-bottom: 0.75rem;
+    }
+    .info-box p:last-child { margin-bottom: 0; }
+    .info-box strong { color: #cbd5e1; }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      color: #475569;
+      font-size: 0.8rem;
+    }
+    .footer a { color: #64748b; text-decoration: none; }
+    .footer a:hover { color: #f97316; }
+
+    /* Error */
+    .error-msg {
+      text-align: center;
+      padding: 1rem;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: #fca5a5;
+      display: none;
+    }
+
+    @media (max-width: 700px) {
+      .big-numbers { grid-template-columns: 1fr; }
+      .page-title h1 { font-size: 1.5rem; }
+      .header-nav { gap: 0.75rem; }
+      .donut-container { flex-direction: column; gap: 1.5rem; }
+      .health-score-row { flex-direction: column; align-items: center; }
+      .flow-row { flex-direction: column; gap: 0.75rem; }
+      .flow-arrow { transform: rotate(90deg); }
+      .big-num-value { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="header-brand">
+        <img src="/night-logo.webp" alt="NightForge" />
+        <span>NightForge</span>
+      </a>
+      <nav class="header-nav">
+        <a href="/">Explorer</a>
+        <a href="/tools/">Tools</a>
+        <a href="/tools/shielded.html" class="active">Shielded Analytics</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <div class="page-title">
+      <h1>Shielded Pool Analytics</h1>
+      <p>Real-time breakdown of shielded vs unshielded transactions on the Midnight Network, with privacy health metrics and anonymity set analysis.</p>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading-state" id="loadingState"><span class="spinner"></span>Fetching shielded pool data...</div>
+    <div class="error-msg" id="errorMsg"></div>
+
+    <!-- Content (hidden until loaded) -->
+    <div id="content" style="display:none;">
+
+      <!-- Big Numbers -->
+      <div class="big-numbers">
+        <div class="big-num-card">
+          <div class="big-num-label">Shielded Transactions</div>
+          <div class="big-num-value cyan" id="shieldedCount">--</div>
+          <div class="big-num-sub">zero-knowledge protected</div>
+        </div>
+        <div class="big-num-card">
+          <div class="big-num-label">Unshielded Transactions</div>
+          <div class="big-num-value orange" id="unshieldedCount">--</div>
+          <div class="big-num-sub">transparent on-chain</div>
+        </div>
+        <div class="big-num-card">
+          <div class="big-num-label">Shielded Ratio</div>
+          <div class="big-num-value green" id="shieldedRatio">--</div>
+          <div class="big-num-sub">of all Midnight txs</div>
+        </div>
+      </div>
+
+      <!-- Donut Chart -->
+      <div class="section-card">
+        <h2>
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 2a10 10 0 0110 10h-10V2z" fill="currentColor" opacity="0.3"/></svg>
+          Shielded vs Unshielded
+        </h2>
+        <div class="donut-container" id="donutContainer"></div>
+      </div>
+
+      <!-- Privacy Trend -->
+      <div class="section-card" id="trendSection">
+        <h2>
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M3 3v18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 16l4-6 4 4 5-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Privacy Trend
+        </h2>
+        <div class="trend-chart-wrap" id="trendChartWrap"></div>
+      </div>
+
+      <!-- Anonymity Set Gauge -->
+      <div class="section-card">
+        <h2>
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M12 2l7 4v5c0 5.25-3.5 9.74-7 11-3.5-1.26-7-5.75-7-11V6l7-4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Anonymity Set Strength
+        </h2>
+        <div class="gauge-wrap" id="gaugeWrap"></div>
+      </div>
+
+      <!-- Privacy Health Score -->
+      <div class="section-card" id="healthSection" style="display:none;">
+        <h2>
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Privacy Health Score
+        </h2>
+        <div class="health-score-row" id="healthScoreRow"></div>
+      </div>
+
+      <!-- Shield/Unshield Flow -->
+      <div class="section-card">
+        <h2>
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Shield / Unshield Flow
+        </h2>
+        <div class="flow-row" id="flowRow"></div>
+      </div>
+
+      <!-- Info Box -->
+      <div class="info-box">
+        <h3>
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 5a1 1 0 110 2 1 1 0 010-2zm-1 4h2v6h-2v-6z" fill="currentColor"/></svg>
+          What does "shielded" mean on Midnight?
+        </h3>
+        <p>Midnight uses <strong>zswap</strong>, a zero-knowledge proof-based shielded pool, to protect transaction privacy. When a transaction is <strong>shielded</strong>, its sender, receiver, and amount are cryptographically hidden using zero-knowledge proofs (ZKPs). Only the participants can see the details.</p>
+        <p><strong>Unshielded</strong> transactions are transparent and visible on-chain, similar to standard blockchain transactions. These are typically contract deployments, governance actions, or explicit public transfers.</p>
+        <p>A <strong>higher shielded ratio</strong> means better network-wide privacy. Every shielded transaction increases the <strong>anonymity set</strong> -- the pool of indistinguishable transactions -- making it exponentially harder for observers to trace any individual transaction. Even if you personally use shielded transactions, a low network-wide ratio weakens privacy for everyone.</p>
+        <p>In short: the more users shield their transactions, the stronger privacy becomes for the entire Midnight network. A healthy network targets a shielded ratio above 70%.</p>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2026 <a href="/">NightForge Explorer</a> &mdash; Built for the Midnight Network</p>
+  </footer>
+
+  <script>
+    function formatNum(n) {
+      if (n === null || n === undefined) return '--';
+      const num = parseFloat(n);
+      if (isNaN(num)) return '--';
+      return num.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    }
+
+    function showError(msg) {
+      document.getElementById('loadingState').style.display = 'none';
+      const el = document.getElementById('errorMsg');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    // Fetch all data
+    async function init() {
+      try {
+        const [privacyResp, scoreResp] = await Promise.all([
+          fetch('/api/analytics/privacy'),
+          fetch('/api/privacy-score').catch(() => null)
+        ]);
+
+        if (!privacyResp.ok) throw new Error('Failed to fetch privacy analytics');
+        const data = await privacyResp.json();
+
+        let scoreData = null;
+        if (scoreResp && scoreResp.ok) {
+          scoreData = await scoreResp.json();
+        }
+
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+
+        renderBigNumbers(data);
+        renderDonut(data);
+        renderTrend(data);
+        renderGauge(data);
+        renderFlow(data);
+        if (scoreData) renderHealthScore(scoreData);
+
+      } catch (err) {
+        showError('Failed to load shielded pool data: ' + err.message);
+      }
+    }
+
+    function renderBigNumbers(data) {
+      document.getElementById('shieldedCount').textContent = formatNum(data.shielded);
+      document.getElementById('unshieldedCount').textContent = formatNum(data.unshielded);
+      const ratio = data.shieldedRatio != null ? (data.shieldedRatio * 100).toFixed(1) + '%' : '--';
+      document.getElementById('shieldedRatio').textContent = ratio;
+    }
+
+    function renderDonut(data) {
+      const shielded = data.shielded || 0;
+      const unshielded = data.unshielded || 0;
+      const total = shielded + unshielded;
+      if (total === 0) return;
+
+      const shieldPct = shielded / total;
+      const radius = 70;
+      const circumference = 2 * Math.PI * radius;
+      const shieldLen = shieldPct * circumference;
+      const unshieldLen = circumference - shieldLen;
+
+      const container = document.getElementById('donutContainer');
+      container.innerHTML = `
+        <svg class="donut-svg" width="200" height="200" viewBox="0 0 200 200">
+          <circle cx="100" cy="100" r="${radius}" fill="none" stroke="#f97316" stroke-width="24"
+            stroke-dasharray="${unshieldLen} ${shieldLen}"
+            stroke-dashoffset="${circumference * 0.25}"
+            transform="rotate(${-90 + shieldPct * 360} 100 100)" />
+          <circle cx="100" cy="100" r="${radius}" fill="none" stroke="#06b6d4" stroke-width="24"
+            stroke-dasharray="${shieldLen} ${unshieldLen}"
+            stroke-dashoffset="${circumference * 0.25}" />
+          <text x="100" y="95" text-anchor="middle" fill="#f1f5f9" font-size="28" font-weight="800" font-family="'JetBrains Mono', monospace">${(shieldPct * 100).toFixed(1)}%</text>
+          <text x="100" y="115" text-anchor="middle" fill="#64748b" font-size="11">shielded</text>
+        </svg>
+        <div class="donut-legend">
+          <div class="legend-item">
+            <div class="legend-dot cyan"></div>
+            <span class="legend-label">Shielded</span>
+            <span class="legend-value">${formatNum(shielded)}</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot orange"></div>
+            <span class="legend-label">Unshielded</span>
+            <span class="legend-value">${formatNum(unshielded)}</span>
+          </div>
+          <div class="legend-item" style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid rgba(255,255,255,0.06);">
+            <span class="legend-label" style="color:#64748b;">Total</span>
+            <span class="legend-value" style="color:#94a3b8;">${formatNum(total)}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTrend(data) {
+      const wrap = document.getElementById('trendChartWrap');
+      const trend = data.trend;
+      if (!trend || !Array.isArray(trend) || trend.length < 2) {
+        wrap.innerHTML = '<div class="trend-empty">Trend data not yet available. Check back as more data accumulates.</div>';
+        return;
+      }
+
+      const width = 860;
+      const height = 200;
+      const padL = 50, padR = 20, padT = 20, padB = 30;
+      const chartW = width - padL - padR;
+      const chartH = height - padT - padB;
+
+      const values = trend.map(d => d.shieldedRatio != null ? d.shieldedRatio : d.ratio);
+      const minV = Math.max(0, Math.min(...values) - 0.05);
+      const maxV = Math.min(1, Math.max(...values) + 0.05);
+      const rangeV = maxV - minV || 0.1;
+
+      const points = values.map((v, i) => {
+        const x = padL + (i / (values.length - 1)) * chartW;
+        const y = padT + chartH - ((v - minV) / rangeV) * chartH;
+        return { x, y };
+      });
+
+      const pathD = points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+      const areaD = pathD + ` L${points[points.length-1].x.toFixed(1)},${padT + chartH} L${points[0].x.toFixed(1)},${padT + chartH} Z`;
+
+      // Y-axis labels
+      const yLabels = [minV, minV + rangeV / 2, maxV];
+      const yLabelsSvg = yLabels.map(v => {
+        const y = padT + chartH - ((v - minV) / rangeV) * chartH;
+        return `<text x="${padL - 8}" y="${y + 4}" text-anchor="end" fill="#475569" font-size="10" font-family="'JetBrains Mono', monospace">${(v * 100).toFixed(0)}%</text>
+                <line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="rgba(255,255,255,0.04)" />`;
+      }).join('');
+
+      // X-axis labels (first, middle, last)
+      const xIndices = [0, Math.floor(values.length / 2), values.length - 1];
+      const xLabelsSvg = xIndices.map(i => {
+        const label = trend[i].date || trend[i].label || trend[i].period || ('Point ' + (i + 1));
+        return `<text x="${points[i].x}" y="${height - 5}" text-anchor="middle" fill="#475569" font-size="10">${label}</text>`;
+      }).join('');
+
+      wrap.innerHTML = `
+        <svg width="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
+          ${yLabelsSvg}
+          ${xLabelsSvg}
+          <defs>
+            <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.3"/>
+              <stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="${areaD}" fill="url(#trendGrad)" />
+          <path d="${pathD}" fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          ${points.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#06b6d4" />`).join('')}
+        </svg>
+      `;
+    }
+
+    function renderGauge(data) {
+      const shielded = data.shielded || 0;
+      let strength, cls, desc, pct;
+
+      if (shielded >= 100000) {
+        strength = 'Strong';
+        cls = 'strong';
+        desc = 'Large anonymity set provides robust privacy';
+        pct = Math.min(100, 60 + (shielded / 200000) * 40);
+      } else if (shielded >= 50000) {
+        strength = 'Good';
+        cls = 'good';
+        desc = 'Growing anonymity set with solid coverage';
+        pct = 40 + (shielded / 100000) * 20;
+      } else if (shielded >= 10000) {
+        strength = 'Moderate';
+        cls = 'moderate';
+        desc = 'Developing anonymity set -- more adoption improves privacy';
+        pct = 15 + (shielded / 50000) * 25;
+      } else {
+        strength = 'Weak';
+        cls = 'weak';
+        desc = 'Small anonymity set -- encourage shielded usage';
+        pct = Math.max(5, (shielded / 10000) * 15);
+      }
+
+      document.getElementById('gaugeWrap').innerHTML = `
+        <div class="gauge-bar-container">
+          <div class="gauge-bar-bg">
+            <div class="gauge-bar-fill" style="width:${pct.toFixed(1)}%"></div>
+          </div>
+          <div class="gauge-labels">
+            <span>Weak</span>
+            <span>Moderate</span>
+            <span>Good</span>
+            <span>Strong</span>
+          </div>
+        </div>
+        <div class="gauge-result">
+          <div class="gauge-strength ${cls}">${strength}</div>
+          <div class="gauge-desc">${formatNum(shielded)} shielded txs</div>
+          <div class="gauge-desc">${desc}</div>
+        </div>
+      `;
+    }
+
+    function renderHealthScore(score) {
+      const section = document.getElementById('healthSection');
+      section.style.display = 'block';
+
+      const composite = score.composite || score.score || score.total || 0;
+      const grade = score.grade || scoreGrade(composite);
+      const breakdown = score.breakdown || score.components || {};
+
+      // Score circle SVG
+      const radius = 40;
+      const circumference = 2 * Math.PI * radius;
+      const filled = (composite / 100) * circumference;
+
+      let breakdownHtml = '';
+      for (const [key, val] of Object.entries(breakdown)) {
+        const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).replace(/_/g, ' ');
+        const displayVal = typeof val === 'number' ? (val > 1 ? val.toFixed(0) : (val * 100).toFixed(1) + '%') : val;
+        breakdownHtml += `
+          <div class="breakdown-item">
+            <span class="breakdown-label">${label}</span>
+            <span class="breakdown-val">${displayVal}</span>
+          </div>`;
+      }
+
+      document.getElementById('healthScoreRow').innerHTML = `
+        <div class="health-score-big">
+          <div class="score-circle">
+            <svg width="100" height="100" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="${radius}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="8" />
+              <circle cx="50" cy="50" r="${radius}" fill="none" stroke="#06b6d4" stroke-width="8"
+                stroke-dasharray="${filled.toFixed(1)} ${(circumference - filled).toFixed(1)}"
+                stroke-dashoffset="${circumference * 0.25}"
+                stroke-linecap="round"
+                transform="rotate(-90 50 50)" />
+            </svg>
+            <div class="score-number">
+              <span class="val">${Math.round(composite)}</span>
+              <span class="grade">${grade}</span>
+            </div>
+          </div>
+        </div>
+        <div class="health-breakdown">${breakdownHtml || '<div style="color:#475569;font-size:0.85rem;">No breakdown available</div>'}</div>
+      `;
+    }
+
+    function scoreGrade(score) {
+      if (score >= 90) return 'Excellent';
+      if (score >= 75) return 'Good';
+      if (score >= 60) return 'Fair';
+      if (score >= 40) return 'Needs Work';
+      return 'Poor';
+    }
+
+    function renderFlow(data) {
+      const shielded = data.shielded || 0;
+      const unshielded = data.unshielded || 0;
+      const contracts = data.contractCalls || 0;
+      const deploys = data.contractDeploys || 0;
+
+      document.getElementById('flowRow').innerHTML = `
+        <div class="flow-box">
+          <div class="flow-label">Unshielded Pool</div>
+          <div class="flow-value orange">${formatNum(unshielded)}</div>
+        </div>
+        <div class="flow-arrow">&xrarr;</div>
+        <div class="flow-box" style="border:1px solid rgba(6,182,212,0.2);">
+          <div class="flow-label">Shielded Pool (zswap)</div>
+          <div class="flow-value cyan">${formatNum(shielded)}</div>
+        </div>
+        <div class="flow-box">
+          <div class="flow-label">Contract Calls</div>
+          <div class="flow-value" style="color:#8b5cf6;">${formatNum(contracts)}</div>
+          <div style="font-size:0.7rem;color:#64748b;margin-top:0.25rem;">${formatNum(deploys)} deploys</div>
+        </div>
+      `;
+    }
+
+    // Start
+    init();
+  </script>
+
+</body>
+</html>
